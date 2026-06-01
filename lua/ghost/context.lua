@@ -1,31 +1,62 @@
 --- Smart context gathering for ghost.nvim.
 ---
---- Collects prefix and suffix for FIM prompts, inspired by how Copilot
---- selects context: imports first, enclosing function signature, then
---- recent lines near the cursor.
+--- Collects prefix and suffix for completions, inspired by how Copilot
+--- selects context:
+---   1. Import region (top of file before first definition)
+---   2. All enclosing structural definitions (module → struct → impl → method)
+---   3. Recent lines near the cursor
 
 local M = {}
 
 -- ── Tree-sitter helpers ──────────────────────────────────────────────────────
 
---- Node types that count as function / class / method definitions.
-local FUNCTION_NODES = {
+--- Node types that count as function / class / struct / method / interface / enum definitions.
+--- Covers a wide range of languages (Go, Rust, TypeScript, Python, Java, Elixir, etc.).
+local STRUCTURAL_NODES = {
+	-- Functions / methods
 	function_declaration = true,
 	function_definition = true,
 	method_declaration = true,
 	method_definition = true,
 	arrow_function = true,
+	-- Classes
 	class_declaration = true,
 	class_definition = true,
+	class_body = true,
+	-- Interfaces / protocols / traits
 	interface_declaration = true,
+	interface_definition = true,
 	protocol_declaration = true,
+	protocol_definition = true,
+	trait_definition = true,
+	trait_impl = true,
+	impl_definition = true,
+	-- Structs / records
+	struct_specification = true,
+	struct_definition = true,
+	record_declaration = true,
+	record_definition = true,
+	-- Enums
+	enum_declaration = true,
+	enum_definition = true,
+	enum_body = true,
+	enum_variant_list = true,
+	-- Type aliases / definitions
+	type_definition = true,
+	type_alias = true,
+	type_declaration = true,
+	-- Modules / namespaces
+	module_definition = true,
+	module_declaration = true,
 }
 
---- Find the smallest enclosing function/class node at a given 0‑based row.
+--- Find ALL enclosing structural nodes (ancestor chain) at a given 0‑based row.
+--- Returns outermost first, innermost last.
+--- e.g. for a method inside a struct inside a module: {module, struct, method}
 ---@param buf number
 ---@param row0 number  0‑based row
----@return table|nil    tree‑sitter node
-local function find_enclosing_node(buf, row0)
+---@return table[]|nil   list of tree‑sitter nodes (outermost → innermost)
+local function find_enclosing_nodes(buf, row0)
 	local ok, parser = pcall(vim.treesitter.get_parser, buf)
 	if not ok or not parser then
 		return nil
@@ -35,34 +66,31 @@ local function find_enclosing_node(buf, row0)
 		return nil
 	end
 
-	local function search(node)
+	local ancestors = {}
+
+	local function walk(node)
 		if not node then
-			return nil
+			return
 		end
 		local s_row, _, e_row, _ = node:range()
+		-- Node must contain the cursor row
 		if s_row > row0 or e_row < row0 then
-			return nil
+			return
 		end
-		if FUNCTION_NODES[node:type()] then
-			-- Walk deeper if a child also matches (prefer the innermost node)
-			for child in node:iter_children() do
-				local inner = search(child)
-				if inner then
-					return inner
-				end
-			end
-			return node
+		if STRUCTURAL_NODES[node:type()] then
+			table.insert(ancestors, node)
 		end
+		-- Walk children; only descend into children that contain the cursor
 		for child in node:iter_children() do
-			local inner = search(child)
-			if inner then
-				return inner
+			local cs, _, ce, _ = child:range()
+			if cs <= row0 and ce >= row0 then
+				walk(child)
 			end
 		end
-		return nil
 	end
 
-	return search(tree:root())
+	walk(tree:root())
+	return #ancestors > 0 and ancestors or nil
 end
 
 --- Guess where the first definition starts (for import‑region detection).
@@ -80,9 +108,9 @@ local function first_definition_row(buf)
 		return nil
 	end
 
-	-- Only scan top-level children — nested functions don't define import boundaries.
+	-- Only scan top-level children — nested definitions don't define import boundaries.
 	for child in tree:root():iter_children() do
-		if FUNCTION_NODES[child:type()] then
+		if STRUCTURAL_NODES[child:type()] then
 			return child:start() -- first return value is the row
 		end
 	end
@@ -123,7 +151,7 @@ end
 
 --- Collect prefix / suffix with smart selection:
 ---   1. Import region (top of file before first definition)
----   2. Enclosing function signature
+---   2. All enclosing structural definitions (outermost → innermost)
 ---   3. Recent lines before cursor
 ---
 --- Lines are deduplicated and presented in file order so the model sees a
@@ -156,16 +184,20 @@ local function context_smart(buf, row0, col, lines)
 		end
 	end
 
-	-- 2.  Enclosing function signature (first 5 lines of the function node).
-	local fn_node = find_enclosing_node(buf, row0)
-	if fn_node then
-		local s_row, _, e_row = fn_node:range()
-		-- Only include lines that are above the cursor
-		local sig_end = math.min(s_row + 5, e_row, row0 - 1)
-		for i = s_row, sig_end do
-			if not included[i] then
-				table.insert(result, { row = i, text = lines[i + 1] or "" })
-				included[i] = true
+	-- 2.  Enclosing structural definitions (outermost → innermost).
+	--     Include the first few lines of each for signature context.
+	--     This captures the full chain: module → struct → impl → method, etc.
+	local ancestors = find_enclosing_nodes(buf, row0)
+	if ancestors then
+		for _, node in ipairs(ancestors) do
+			local s_row, _, e_row = node:range()
+			-- Include up to 4 lines or half the node, whichever is smaller
+			local sig_end = math.min(s_row + 4, s_row + math.floor((e_row - s_row) / 2), row0 - 1)
+			for i = s_row, sig_end do
+				if not included[i] then
+					table.insert(result, { row = i, text = lines[i + 1] or "" })
+					included[i] = true
+				end
 			end
 		end
 	end
