@@ -18,10 +18,11 @@ Inline tab-completion for Neovim. Like Copilot, but local, free, and yours.
 ## Requirements
 
 - Neovim ≥ 0.10
-- [Ollama](https://ollama.com) with a code model pulled:
+- [Ollama](https://ollama.com) with a **base** code model (not instruct/chat):
   ```bash
-  ollama pull qwen2.5-coder:1.5b
+  ollama pull qwen2.5-coder:7b-base
   ```
+  Base models output raw code. Instruct models wrap completions in markdown — avoid them.
 
 ## Installation
 
@@ -52,7 +53,7 @@ All options with their defaults:
 ```lua
 require("ghost").setup({
   backend = "ollama",              -- "ollama" | "openai" (future)
-  model = "qwen2.5-coder:1.5b",    -- model name on the backend
+  model = "qwen2.5-coder:7b-base",  -- use a *base* model, not instruct
   debounce_ms = 300,               -- idle time (ms) before auto-trigger fires
   enabled = true,                  -- auto-trigger on/off
   keymaps = {

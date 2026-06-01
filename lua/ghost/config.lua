@@ -2,7 +2,7 @@ local M = {}
 
 M.defaults = {
 	backend = "ollama",
-	model = "qwen2.5-coder:1.5b",
+	model = "qwen2.5-coder:7b-base",
 	debounce_ms = 300,
 	enabled = true,
 	keymaps = {
