@@ -28,7 +28,7 @@ function M.get_context()
 	return require("ghost.context").get_context()
 end
 
--- ── Comment wrapping ─────────────────────────────────────────────────────────
+-- ── Comment helpers ──────────────────────────────────────────────────────────
 
 --- Detect the comment prefix on a line (if any), accounting for leading whitespace.
 --- Returns (indent, comment_char, body) or nil.
@@ -51,6 +51,122 @@ local function parse_comment(line)
 	end
 	return nil
 end
+
+-- ── Chatty-line detection ────────────────────────────────────────────────────
+
+--- Heuristic: does this line look like the model explaining itself
+--- rather than writing code?
+---@param line string
+---@return boolean
+local function is_chatty_line(line)
+	if not line or line == "" then
+		return false
+	end
+	local trimmed = line:gsub("^%s*(.-)%s*$", "%1")
+
+	-- Empty / whitespace-only lines are fine
+	if trimmed == "" then
+		return false
+	end
+
+	-- Markdown fences: ```, ~~~ — model switched to explanation mode
+	if trimmed:match("^```") or trimmed:match("^~~~") then
+		return true
+	end
+
+	-- Markdown headings: ## Title, ### Subtitle
+	if trimmed:match("^#+%s") then
+		return true
+	end
+
+	-- Bullet points: - item, * item
+	if trimmed:match("^[-*]%s") then
+		return true
+	end
+
+	-- Plaintext transition phrases: the model has switched to explaining.
+	-- Match sentence-style openers that almost never appear in code.
+	if trimmed:match("^[Hh]ere'?s?%s") -- "Here is", "Here's"
+		or trimmed:match("^[Tt]his%s") -- "This function", "This code"
+		or trimmed:match("^[Ii]t%s%l") -- "It seems", "it looks" (but not "it x =" )
+		or trimmed:match("^[Ii]'[lm]%s") -- "I'm", "I'll"
+		or trimmed:match("^[Yy]ou'?r?e?'?s?%s") -- "You are", "You can", "You're", "You'll"
+		or trimmed:match("^[Ll]et'?s?%s") -- "Let me", "Let's"
+		or trimmed:match("^[Tt]o%s%u") -- "To use", "To implement" (capital after "To")
+		or trimmed:match("^[Ss]ure[,!.]?$")
+		or trimmed:match("^[Nn]ote[:%s]") -- "Note:", "Note that"
+		or trimmed:match("^[Rr]emember[:%s]") -- "Remember:", "Remember to"
+		or trimmed:match("^[Bb]ased on%s") -- "Based on the code"
+		or trimmed:match("^[Gg]iven%s") -- "Given the context"
+		or trimmed:match("^[Bb]e careful") or trimmed:match("^[Dd]on'?t%s") then
+		return true
+	end
+
+	-- Prose lines with markdown backtick formatting: `likeThis`
+	-- This is a telltale sign the model is writing prose, not code.
+	if trimmed:match("`[%w_]+`") and not trimmed:match("[{}%(%)%=;:<>,]") then
+		return true
+	end
+
+	-- Closing markdown fence
+	if trimmed:match("^```$") or trimmed:match("^~~~$") then
+		return true
+	end
+
+	-- If the line is a comment AND reads like prose (not a code annotation)
+	local _, _, body = parse_comment(trimmed)
+	if body then
+		body = body:gsub("^%s*(.-)%s*$", "%1")
+		-- Short code annotations are fine: "// TODO", "// FIXME", "// 1.", "// --"
+		if #body <= 6 then return false end
+		-- Annotation keywords are fine
+		if body:match("^[A-Z]+[%s:]") then return false end
+		-- If the comment body has no code symbols and looks like a sentence, it's chatty
+		if body:match("%.[%s]*$") or body:match("[!?][%s]*$") then
+			return true
+		end
+		if #body > 50 and not body:match("[{}%(%)%=;,]") then
+			return true
+		end
+		-- Starts with a chatty word
+		if body:match("^[Hh]ere") or body:match("^[Tt]his") or body:match("^[Yy]ou")
+			or body:match("^[Ww]e") or body:match("^[Ii]f you") or body:match("^[Tt]he ")
+			or body:match("^[Ff]irst") or body:match("^[Tt]hen") or body:match("^[Nn]ext")
+			or body:match("^[Ff]inally") or body:match("^[Bb]ecause") then
+			return true
+		end
+	end
+
+	-- Pure prose with no code syntax at all — uncommon, but possible
+	if #trimmed > 30
+		and not trimmed:match("[{}%(%)%[%]=;:,.<>%+%-%*/%%@#&|^!~`$]")
+		and not trimmed:match("^%s+")
+		and not trimmed:match("^[%a_]+%s+[%a_]+$") then
+		return true
+	end
+
+	return false
+end
+
+--- Scan from the first line and truncate at the first chatty line.
+---@param text string
+---@return string
+local function truncate_at_chat(text)
+	if not text or text == "" then
+		return text
+	end
+	local lines = vim.split(text, "\n")
+	local result = {}
+	for _, line in ipairs(lines) do
+		if is_chatty_line(line) then
+			break -- truncate at the first chatty line
+		end
+		table.insert(result, line)
+	end
+	return table.concat(result, "\n")
+end
+
+-- ── Comment wrapping ─────────────────────────────────────────────────────────
 
 --- Wrap a line of text at word boundaries to fit within max_width.
 --- Returns a list of wrapped lines.
@@ -136,6 +252,9 @@ local function cleanup_completion(text, suffix)
 	if text == "" or text:match("^%s*$") then
 		return ""
 	end
+
+	-- Truncate at first chatty line (model explaining itself)
+	text = truncate_at_chat(text)
 
 	-- Wrap comment lines at 80 characters
 	text = wrap_comment_lines(text, 80)
