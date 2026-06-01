@@ -219,6 +219,21 @@ local function context_smart(buf, row0, col, lines)
 	for _, item in ipairs(result) do
 		table.insert(prefix_lines, item.text)
 	end
+
+	-- 4.  LSP enrichment (opt‑in): look up type definitions across the project.
+	if ctx.lsp_enrich then
+		local ok, context_lsp = pcall(require, "ghost.context_lsp")
+		if ok then
+			local extra = context_lsp.enrich(prefix_lines, ctx.lsp_max_types or 3)
+			if extra and #extra > 0 then
+				-- Prepend LSP definitions before the rest of the context
+				for _, line in ipairs(extra) do
+					table.insert(prefix_lines, 1, line)
+				end
+			end
+		end
+	end
+
 	table.insert(prefix_lines, before_cursor)
 
 	-- Suffix: lines below cursor (always contiguous, simpler)

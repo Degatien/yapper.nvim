@@ -26,10 +26,15 @@ M.defaults = {
 	--- Larger = more context but longer latency / higher memory.
 	--- Strategy: "smart" → imports + function signature + recent lines (Copilot‑inspired)
 	---           "simple" → contiguous line window (original behaviour)
+	--- lsp_enrich: if true, looks up type definitions via LSP across the project
+	---             and includes them in the prompt context.
+	--- lsp_max_types: max type definitions to resolve per completion (avoid latency)
 	context_window = {
 		strategy = "smart",
 		prefix_lines = 200, -- lines above the cursor
 		suffix_lines = 50,  -- lines below the cursor
+		lsp_enrich = false,  -- opt-in for now, enable if you have a fast LSP
+		lsp_max_types = 3,
 	},
 	--- Max tokens the model may generate per completion.
 	num_predict = 256,
