@@ -41,6 +41,8 @@ function M.setup(opts)
 
 		local prefix, suffix = completion.get_context()
 
+		render.show_loading()
+
 		completion.request_completion_stream(
 			prefix,
 			suffix,
@@ -65,7 +67,8 @@ function M.setup(opts)
 					return
 				end
 				if err then
-					-- Silently ignore errors during auto‑trigger.
+					-- Silently ignore errors during auto‑trigger, but hide loading.
+					render.hide_loading()
 					return
 				end
 				-- Ensure the final text is shown (the last chunk already did this,
@@ -74,6 +77,8 @@ function M.setup(opts)
 					if not render.is_visible() then
 						render.show_ghost(text)
 					end
+				else
+					render.hide_loading()
 				end
 			end
 		)
@@ -129,7 +134,9 @@ function M.setup(opts)
 			return
 		end
 		local prefix, suffix = completion.get_context()
+		render.show_loading()
 		completion.request_completion(prefix, suffix, function(text, err)
+			render.hide_loading()
 			if err then
 				-- Truncate long error messages at the first newline
 				local msg = err:gsub("\n.*", "")

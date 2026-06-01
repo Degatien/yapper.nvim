@@ -7,6 +7,7 @@ local state = {
 	text = nil,
 	-- "overlay" for single‑line, "virt_lines" for multi‑line
 	mode = nil,
+	loading_id = nil,
 }
 
 --- Low‑level: place or update the extmark.
@@ -79,12 +80,41 @@ end
 
 --- Remove the current ghost text.
 function M.clear_ghost()
+	M.hide_loading()
 	if state.extmark_id then
 		pcall(vim.api.nvim_buf_del_extmark, 0, ns, state.extmark_id)
 	end
 	state.extmark_id = nil
 	state.text = nil
 	state.mode = nil
+end
+
+--- Show a loading indicator at the cursor while the model is thinking.
+--- Clears any existing ghost first.
+function M.show_loading()
+	M.clear_ghost()
+	local cursor = vim.api.nvim_win_get_cursor(0)
+	local ok, id = pcall(vim.api.nvim_buf_set_extmark, 0, ns, cursor[1] - 1, cursor[2], {
+		virt_text = { { " ⟐", "NonText" } },
+		virt_text_pos = "overlay",
+	})
+	if ok then
+		state.loading_id = id
+	end
+end
+
+--- Hide the loading indicator if visible.
+function M.hide_loading()
+	if state.loading_id then
+		pcall(vim.api.nvim_buf_del_extmark, 0, ns, state.loading_id)
+		state.loading_id = nil
+	end
+end
+
+--- Check whether the loading indicator is currently shown.
+---@return boolean
+function M.is_loading()
+	return state.loading_id ~= nil
 end
 
 --- Insert the ghost text into the buffer and clear it.
