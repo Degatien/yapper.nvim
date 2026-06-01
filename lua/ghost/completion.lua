@@ -99,6 +99,10 @@ function M.request_completion_stream(prefix, suffix, on_chunk, on_finish)
 	local url = config.ollama.url .. "/api/generate"
 	local prompt = build_fim_prompt(prefix, suffix)
 
+	-- Stop tokens tell the model where to end the FIM completion.
+	-- Without these the model may regenerate the entire file context.
+	local fim_stop = { "<|fim_end|>", "<|endoftext|>" }
+
 	local body = vim.fn.json_encode({
 		model = config.model,
 		prompt = prompt,
@@ -107,6 +111,7 @@ function M.request_completion_stream(prefix, suffix, on_chunk, on_finish)
 			num_predict = config.num_predict,
 			temperature = 0.1,
 			top_p = 0.9,
+			stop = fim_stop,
 		},
 	})
 
@@ -204,6 +209,8 @@ function M.request_completion(prompt, callback)
 	local config = require("ghost.config").options
 	local url = config.ollama.url .. "/api/generate"
 
+	local fim_stop = { "<|fim_end|>", "<|endoftext|>" }
+
 	local body = vim.fn.json_encode({
 		model = config.model,
 		prompt = prompt,
@@ -212,6 +219,7 @@ function M.request_completion(prompt, callback)
 			num_predict = config.num_predict,
 			temperature = 0.1,
 			top_p = 0.9,
+			stop = fim_stop,
 		},
 	})
 
