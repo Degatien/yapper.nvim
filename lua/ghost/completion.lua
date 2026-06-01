@@ -253,6 +253,9 @@ local function cleanup_completion(text, suffix)
 		return ""
 	end
 
+	-- Strip any leaked FIM tokens the model may have emitted
+	text = text:gsub("<|fim_[a-z_]+|>", "")
+
 	-- Truncate at first chatty line (model explaining itself)
 	text = truncate_at_chat(text)
 
