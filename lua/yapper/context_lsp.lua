@@ -1,4 +1,4 @@
---- LSP-powered context enrichment for ghost.nvim.
+--- LSP-powered context enrichment for yapper.nvim.
 ---
 --- Extracts type names from the enclosing function signatures and nearby
 --- code, then looks up their definitions across the workspace via LSP.

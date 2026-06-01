@@ -1,15 +1,15 @@
---- ghost.nvim — inline completion plugin.
---- Spawn a ghost: `:GhostComplete`, or let it auto‑trigger.
+--- yapper.nvim — inline completion plugin.
+--- Spawn a yapper: `:YapperComplete`, or let it auto‑trigger.
 --- See README.md for setup and keymaps.
 
 local M = {}
 
 function M.setup(opts)
-	require("ghost.config").setup(opts)
+	require("yapper.config").setup(opts)
 
-	local completion = require("ghost.completion")
-	local render = require("ghost.render")
-	local config = require("ghost.config").options
+	local completion = require("yapper.completion")
+	local render = require("yapper.render")
+	local config = require("yapper.config").options
 
 	-- ── Buffer guard ────────────────────────────────────────────────
 	--- Skip completions in plugin / special buffers (Telescope, quickfix, terminals,
@@ -55,9 +55,9 @@ function M.setup(opts)
 				-- On the first chunk we create the extmark; on subsequent chunks
 				-- we update it in place (no flicker).
 				if not render.is_visible() then
-					render.show_ghost(text_so_far)
+					render.show_yapper(text_so_far)
 				else
-					render.update_ghost(text_so_far)
+					render.update_yapper(text_so_far)
 				end
 			end,
 			---@param text string?
@@ -68,14 +68,14 @@ function M.setup(opts)
 				end
 				if err then
 					render.hide_loading()
-					vim.notify("[ghost] " .. err:gsub("\n.*", ""), vim.log.levels.WARN)
+					vim.notify("[yapper] " .. err:gsub("\n.*", ""), vim.log.levels.WARN)
 					return
 				end
 				-- Ensure the final text is shown (the last chunk already did this,
 				-- but guard against a race where the stream ends without a final chunk).
 				if text and text ~= "" then
 					if not render.is_visible() then
-						render.show_ghost(text)
+						render.show_yapper(text)
 					end
 				else
 					render.hide_loading()
@@ -86,14 +86,14 @@ function M.setup(opts)
 
 	-- ── Autocmd group ──────────────────────────────────────────────
 
-	local ghost_group = vim.api.nvim_create_augroup("ghost_nvim", { clear = true })
+	local yapper_group = vim.api.nvim_create_augroup("yapper_nvim", { clear = true })
 
-	--- Clear ghost the instant the user presses any key (before the char is inserted).
+	--- Clear yapper the instant the user presses any key (before the char is inserted).
 	--- Also cancels any in‑flight stream.
 	vim.api.nvim_create_autocmd("InsertCharPre", {
-		group = ghost_group,
+		group = yapper_group,
 		callback = function()
-			render.clear_ghost()
+			render.clear_yapper()
 			completion.cancel_stream()
 		end,
 	})
@@ -101,7 +101,7 @@ function M.setup(opts)
 	--- After the buffer changed, cancel any in‑flight stream and restart the
 	--- debounce timer.  When typing stops for `debounce_ms`, a completion fires.
 	vim.api.nvim_create_autocmd("TextChangedI", {
-		group = ghost_group,
+		group = yapper_group,
 		callback = function()
 			if not config.enabled or not is_code_buffer() then
 				return
@@ -116,20 +116,20 @@ function M.setup(opts)
 		end,
 	})
 
-	--- Leaving insert mode cancels any pending request, stream, and ghost.
+	--- Leaving insert mode cancels any pending request, stream, and yapper.
 	vim.api.nvim_create_autocmd("InsertLeave", {
-		group = ghost_group,
+		group = yapper_group,
 		callback = function()
 			debounce_timer:stop()
 			completion.cancel_stream()
-			render.clear_ghost()
+			render.clear_yapper()
 		end,
 	})
 
 	-- ── Commands ───────────────────────────────────────────────────
 
 	--- Manual completion command (non‑streaming, shows errors).
-	vim.api.nvim_create_user_command("GhostComplete", function()
+	vim.api.nvim_create_user_command("YapperComplete", function()
 		if not config.enabled or not is_code_buffer() then
 			return
 		end
@@ -140,23 +140,23 @@ function M.setup(opts)
 			if err then
 				-- Truncate long error messages at the first newline
 				local msg = err:gsub("\n.*", "")
-				vim.notify("[ghost] " .. msg, vim.log.levels.WARN)
+				vim.notify("[yapper] " .. msg, vim.log.levels.WARN)
 				return
 			end
-			render.show_ghost(text)
+			render.show_yapper(text)
 		end)
-	end, { desc = "Request a ghost completion" })
+	end, { desc = "Request a yapper completion" })
 
 	--- Toggle auto‑trigger on/off.
-	vim.api.nvim_create_user_command("GhostToggle", function()
+	vim.api.nvim_create_user_command("YapperToggle", function()
 		config.enabled = not config.enabled
 		if not config.enabled then
 			debounce_timer:stop()
 			completion.cancel_stream()
-			render.clear_ghost()
+			render.clear_yapper()
 		end
-		vim.notify("[ghost] " .. (config.enabled and "enabled" or "disabled"))
-	end, { desc = "Toggle ghost auto‑completion" })
+		vim.notify("[yapper] " .. (config.enabled and "enabled" or "disabled"))
+	end, { desc = "Toggle yapper auto‑completion" })
 
 	-- ── Keymaps ─────────────────────────────────────────────────────
 
@@ -164,13 +164,13 @@ function M.setup(opts)
 
 	-- Manual completion from insert mode
 	vim.keymap.set("i", km.manual, function()
-		vim.cmd("GhostComplete")
-	end, { desc = "Request ghost completion" })
+		vim.cmd("YapperComplete")
+	end, { desc = "Request yapper completion" })
 
-	-- Accept: inserts the ghost text when present, otherwise passes through.
+	-- Accept: inserts the yapper text when present, otherwise passes through.
 	vim.keymap.set("i", km.accept, function()
 		if render.is_visible() then
-			render.accept_ghost()
+			render.accept_yapper()
 		else
 			vim.api.nvim_feedkeys(
 				vim.api.nvim_replace_termcodes("<Tab>", true, false, true),
@@ -178,24 +178,24 @@ function M.setup(opts)
 				false
 			)
 		end
-	end, { desc = "Accept ghost or Tab" })
+	end, { desc = "Accept yapper or Tab" })
 
-	-- Dismiss: clears ghost text, then exits insert mode.
+	-- Dismiss: clears yapper text, then exits insert mode.
 	vim.keymap.set("i", km.dismiss, function()
 		if render.is_visible() then
-			render.clear_ghost()
+			render.clear_yapper()
 		end
 		vim.api.nvim_feedkeys(
 			vim.api.nvim_replace_termcodes("<Esc>", true, false, true),
 			"n",
 			false
 		)
-	end, { desc = "Dismiss ghost or Esc" })
+	end, { desc = "Dismiss yapper or Esc" })
 
 	-- Toggle from normal mode
 	vim.keymap.set("n", km.toggle, function()
-		vim.cmd("GhostToggle")
-	end, { desc = "Toggle ghost auto‑completion" })
+		vim.cmd("YapperToggle")
+	end, { desc = "Toggle yapper auto‑completion" })
 end
 
 return M

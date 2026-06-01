@@ -46,7 +46,7 @@ M.options = {}
 
 function M.setup(opts)
 	if not opts then
-		-- Bare call from plugin/ghost.lua — already initialized via lazy, skip.
+		-- Bare call from plugin/yapper.lua — already initialized via lazy, skip.
 		if M._setup_done then
 			return
 		end

@@ -1,4 +1,4 @@
---- OpenAI / compatible backend for ghost.nvim.
+--- OpenAI / compatible backend for yapper.nvim.
 ---
 --- Supports two API styles:
 ---   "completions" – legacy /v1/completions  (instruct models, native `suffix` param)
@@ -11,7 +11,7 @@ local M = {}
 --- Resolve the API key from config or environment.
 ---@return string?
 local function get_api_key()
-	local config = require("ghost.config").options
+	local config = require("yapper.config").options
 	if config.openai.api_key and config.openai.api_key ~= "" then
 		return config.openai.api_key
 	end
@@ -73,7 +73,7 @@ end
 ---@param on_finish fun(string?, string?)
 ---@return integer|nil job_id
 function M.request_completion_stream(prefix, suffix, on_chunk, on_finish)
-	local config = require("ghost.config").options
+	local config = require("yapper.config").options
 	local api_key = get_api_key()
 	if not api_key then
 		on_finish(nil, "OpenAI API key not set (config.openai.api_key or OPENAI_API_KEY)")
@@ -197,7 +197,7 @@ end
 ---@param suffix   string
 ---@param callback fun(string?, string?)
 function M.request_completion(prefix, suffix, callback)
-	local config = require("ghost.config").options
+	local config = require("yapper.config").options
 	local api_key = get_api_key()
 	if not api_key then
 		callback(nil, "OpenAI API key not set (config.openai.api_key or OPENAI_API_KEY)")

@@ -1,4 +1,4 @@
---- Smart context gathering for ghost.nvim.
+--- Smart context gathering for yapper.nvim.
 ---
 --- Collects prefix and suffix for completions, inspired by how Copilot
 --- selects context:
@@ -126,7 +126,7 @@ end
 ---@param lines string[]
 ---@return string, string
 local function context_simple(buf, row0, col, lines)
-	local ctx = require("ghost.config").options.context_window
+	local ctx = require("yapper.config").options.context_window
 
 	local current_line = lines[row0 + 1] or ""
 	local before_cursor = current_line:sub(1, col)
@@ -162,7 +162,7 @@ end
 ---@param lines string[]
 ---@return string, string
 local function context_smart(buf, row0, col, lines)
-	local ctx = require("ghost.config").options.context_window
+	local ctx = require("yapper.config").options.context_window
 
 	local current_line = lines[row0 + 1] or ""
 	local before_cursor = current_line:sub(1, col)
@@ -222,7 +222,7 @@ local function context_smart(buf, row0, col, lines)
 
 	-- 4.  LSP enrichment (opt‑in): look up type definitions across the project.
 	if ctx.lsp_enrich then
-		local ok, context_lsp = pcall(require, "ghost.context_lsp")
+		local ok, context_lsp = pcall(require, "yapper.context_lsp")
 		if ok then
 			local extra = context_lsp.enrich(prefix_lines, ctx.lsp_max_types or 3)
 			if extra and #extra > 0 then
@@ -255,7 +255,7 @@ end
 ---
 ---@return string prefix, string suffix
 function M.get_context()
-	local config = require("ghost.config").options
+	local config = require("yapper.config").options
 	local buf = vim.api.nvim_get_current_buf()
 	local cursor = vim.api.nvim_win_get_cursor(0)
 	local row0 = cursor[1] - 1 -- 0‑based

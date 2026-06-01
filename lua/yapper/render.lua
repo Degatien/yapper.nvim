@@ -1,6 +1,6 @@
 local M = {}
 
-local ns = vim.api.nvim_create_namespace("ghost_ns")
+local ns = vim.api.nvim_create_namespace("yapper_ns")
 
 local state = {
 	extmark_id = nil,
@@ -36,11 +36,11 @@ local function set_or_update_extmark(buf, row_1, col, text, id)
 	end
 end
 
---- Show ghost text after the cursor.
---- Clears any previous ghost first.
+--- Show yapper text after the cursor.
+--- Clears any previous yapper first.
 ---@param text string The completion text to display.
-function M.show_ghost(text)
-	M.clear_ghost()
+function M.show_yapper(text)
+	M.clear_yapper()
 	if not text or text == "" then
 		return
 	end
@@ -56,15 +56,15 @@ function M.show_ghost(text)
 	end
 end
 
---- Update the existing ghost text in place (no flicker).
---- The extmark must already exist (created by `show_ghost`).
+--- Update the existing yapper text in place (no flicker).
+--- The extmark must already exist (created by `show_yapper`).
 ---@param text string The updated completion text.
-function M.update_ghost(text)
+function M.update_yapper(text)
 	if not state.extmark_id then
 		return
 	end
 	if not text or text == "" then
-		M.clear_ghost()
+		M.clear_yapper()
 		return
 	end
 	local cursor = vim.api.nvim_win_get_cursor(0)
@@ -74,12 +74,12 @@ function M.update_ghost(text)
 		state.mode = text:find("\n") and "virt_lines" or "overlay"
 	else
 		-- Extmark was invalidated (e.g. buffer changed underneath us)
-		M.clear_ghost()
+		M.clear_yapper()
 	end
 end
 
---- Remove the current ghost text.
-function M.clear_ghost()
+--- Remove the current yapper text.
+function M.clear_yapper()
 	M.hide_loading()
 	if state.extmark_id then
 		pcall(vim.api.nvim_buf_del_extmark, 0, ns, state.extmark_id)
@@ -90,9 +90,9 @@ function M.clear_ghost()
 end
 
 --- Show a loading indicator at the cursor while the model is thinking.
---- Clears any existing ghost first.
+--- Clears any existing yapper first.
 function M.show_loading()
-	M.clear_ghost()
+	M.clear_yapper()
 	local cursor = vim.api.nvim_win_get_cursor(0)
 	local ok, id = pcall(vim.api.nvim_buf_set_extmark, 0, ns, cursor[1] - 1, cursor[2], {
 		virt_text = { { " ⟐", "NonText" } },
@@ -117,8 +117,8 @@ function M.is_loading()
 	return state.loading_id ~= nil
 end
 
---- Insert the ghost text into the buffer and clear it.
-function M.accept_ghost()
+--- Insert the yapper text into the buffer and clear it.
+function M.accept_yapper()
 	if not state.text then
 		return
 	end
@@ -135,10 +135,10 @@ function M.accept_ghost()
 		vim.api.nvim_win_set_cursor(0, { row_1, col + #state.text })
 	end
 
-	M.clear_ghost()
+	M.clear_yapper()
 end
 
---- Check whether a ghost is currently displayed.
+--- Check whether a yapper is currently displayed.
 ---@return boolean
 function M.is_visible()
 	return state.extmark_id ~= nil

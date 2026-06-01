@@ -11,10 +11,10 @@ local M = {}
 --- Load the currently active backend module by name.
 ---@return table
 local function load_backend()
-	local config = require("ghost.config").options
-	local ok, backend = pcall(require, "ghost.backend." .. config.backend)
+	local config = require("yapper.config").options
+	local ok, backend = pcall(require, "yapper.backend." .. config.backend)
 	if not ok then
-		error("ghost.nvim: unknown backend '" .. config.backend .. "'")
+		error("yapper.nvim: unknown backend '" .. config.backend .. "'")
 	end
 	return backend
 end
@@ -22,10 +22,10 @@ end
 -- ── Context ───────────────────────────────────────────────────────────────────
 
 --- Collect prefix and suffix for the current cursor position.
---- Delegates to `ghost.context` which implements the configured strategy.
+--- Delegates to `yapper.context` which implements the configured strategy.
 ---@return string prefix, string suffix
 function M.get_context()
-	return require("ghost.context").get_context()
+	return require("yapper.context").get_context()
 end
 
 -- ── Comment helpers ──────────────────────────────────────────────────────────
@@ -236,10 +236,10 @@ end
 -- ── Response cleanup ─────────────────────────────────────────────────────────
 
 local function log(msg, text1, text2)
-	local cfg = require("ghost.config").options
+	local cfg = require("yapper.config").options
 	if cfg and cfg.debug then
 		local lines = {}
-		table.insert(lines, "[ghost-debug] " .. msg)
+		table.insert(lines, "[yapper-debug] " .. msg)
 		if text1 then table.insert(lines, "  raw:    " .. vim.inspect(text1)) end
 		if text2 then table.insert(lines, "  suffix: " .. vim.inspect(text2)) end
 		vim.notify(table.concat(lines, "\n"), vim.log.levels.INFO)
@@ -382,7 +382,7 @@ function M.request_completion_stream(prefix, suffix, on_chunk, on_finish)
 			if cleaned == "" and suffix ~= "" and not retried then
 				retried = true
 				-- Reduce num_predict temporarily for the prefix-only retry
-				local cfg = require("ghost.config").options
+				local cfg = require("yapper.config").options
 				local saved_num = cfg.num_predict
 				cfg.num_predict = math.min(saved_num or 64, 16)
 				stream.job_id = backend.request_completion_stream(prefix, "",
@@ -456,7 +456,7 @@ function M.request_completion(prefix, suffix, callback)
 			-- Retry with prefix-only if FIM returned empty
 			if cleaned == "" and suffix_val ~= "" and not retried then
 				retried = true
-				local cfg = require("ghost.config").options
+				local cfg = require("yapper.config").options
 				local saved_num = cfg.num_predict
 				cfg.num_predict = math.min(saved_num or 64, 16)
 				do_request("")

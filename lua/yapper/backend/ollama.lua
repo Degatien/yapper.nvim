@@ -1,4 +1,4 @@
---- Ollama backend for ghost.nvim.
+--- Ollama backend for yapper.nvim.
 --- Uses `/api/generate` with FIM tokens for base completion models
 --- (deepseek-coder-base, qwen2.5-coder-base, etc.) that have no chat template.
 
@@ -27,7 +27,7 @@ end
 ---@param on_finish fun(string?, string?)
 ---@return integer|nil job_id  the jobstart id, or nil on failure
 function M.request_completion_stream(prefix, suffix, on_chunk, on_finish)
-	local config = require("ghost.config").options
+	local config = require("yapper.config").options
 	local url = config.ollama.url .. "/api/generate"
 	local prompt = M.build_prompt(prefix, suffix)
 
@@ -117,7 +117,7 @@ end
 ---@param suffix   string   code after cursor
 ---@param callback fun(string?, string?)
 function M.request_completion(prefix, suffix, callback)
-	local config = require("ghost.config").options
+	local config = require("yapper.config").options
 	local url = config.ollama.url .. "/api/generate"
 	local prompt = M.build_prompt(prefix, suffix)
 
