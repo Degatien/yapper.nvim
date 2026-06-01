@@ -7,6 +7,7 @@ Inline tab-completion for Neovim. Like Copilot, but local, free, and yours.
 ## Features
 
 - Ghost text rendered after the cursor via `nvim_buf_set_extmark`.
+- Auto‑trigger after a typing pause (default 300ms).
 - Manual completion on `<Leader>c` (insert mode).
 - Accept with `<Tab>`, dismiss with `<Esc>`.
 - Pluggable backends — Ollama first, OpenAI later.
@@ -50,7 +51,7 @@ All options with their defaults:
 require("ghost").setup({
   backend = "ollama",              -- "ollama" | "openai" (future)
   model = "qwen2.5-coder:1.5b",    -- model name on the backend
-  debounce_ms = 300,               -- idle time before auto-trigger (future)
+  debounce_ms = 300,               -- idle time (ms) before auto-trigger fires
   enabled = true,                  -- auto-trigger on/off
   keymaps = {
     manual = "<Leader>c",          -- manual completion (insert mode)
@@ -65,6 +66,11 @@ require("ghost").setup({
     url = "https://api.openai.com/v1",
     api_key = "",                  -- or set OPENAI_API_KEY env var
   },
+  context_window = {
+    prefix_lines = 100,            -- lines above the cursor to include
+    suffix_lines = 30,             -- lines below the cursor to include
+  },
+  num_predict = 256,               -- max tokens the model may generate
 })
 ```
 
@@ -87,7 +93,7 @@ Typing pause (300ms) → collect buffer context
 
 ## TODO
 
-- [ ] Auto-trigger with debounce timer
+- [x] Auto-trigger with debounce timer
 - [ ] Auto‑pull missing model via Ollama API
 - [ ] Error handling / silent fallback when Ollama is down
 - [ ] OpenAI‑compatible backend

@@ -18,6 +18,14 @@ M.defaults = {
 		url = "https://api.openai.com/v1",
 		api_key = "",
 	},
+	--- Context window: how much of the buffer to include around the cursor.
+	--- Larger = more context but longer latency / higher memory.
+	context_window = {
+		prefix_lines = 100, -- lines above the cursor
+		suffix_lines = 30,  -- lines below the cursor
+	},
+	--- Max tokens the model may generate per completion.
+	num_predict = 256,
 }
 
 M.options = {}

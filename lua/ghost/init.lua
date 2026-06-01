@@ -11,6 +11,79 @@ function M.setup(opts)
 	local render = require("ghost.render")
 	local config = require("ghost.config").options
 
+	-- ── Debounce timer & stale‑request guard ───────────────────────
+	--- Timer restarted on every keystroke; fires `debounce_ms` after the last one.
+	local debounce_timer = vim.uv.new_timer()
+	--- Monotonically increasing request ID.  Responses with an old ID are dropped.
+	local req_id = 0
+
+	local function trigger_completion()
+		if not config.enabled then
+			return
+		end
+		-- Don't request if the user already left insert mode.
+		if vim.api.nvim_get_mode().mode ~= "i" then
+			return
+		end
+
+		req_id = req_id + 1
+		local my_id = req_id
+
+		local prefix, suffix = completion.get_context()
+		local prompt = completion.build_prompt(prefix, suffix)
+		completion.request_completion(prompt, function(text, err)
+			if my_id ~= req_id then
+				return -- stale response; a newer keystroke has already fired
+			end
+			if err then
+				-- Silently ignore errors during auto‑trigger.
+				-- Use :GhostComplete manually to see errors.
+				return
+			end
+			render.show_ghost(text)
+		end)
+	end
+
+	-- ── Autocmd group ──────────────────────────────────────────────
+
+	local ghost_group = vim.api.nvim_create_augroup("ghost_nvim", { clear = true })
+
+	--- Clear ghost the instant the user presses any key (before the char is inserted).
+	vim.api.nvim_create_autocmd("InsertCharPre", {
+		group = ghost_group,
+		callback = function()
+			render.clear_ghost()
+		end,
+	})
+
+	--- After the buffer changed, restart the debounce timer.
+	--- When typing stops for `debounce_ms`, a completion is triggered.
+	vim.api.nvim_create_autocmd("TextChangedI", {
+		group = ghost_group,
+		callback = function()
+			if not config.enabled then
+				return
+			end
+			debounce_timer:stop()
+			debounce_timer:start(
+				config.debounce_ms,
+				0,
+				vim.schedule_wrap(trigger_completion)
+			)
+		end,
+	})
+
+	--- Leaving insert mode cancels any pending request and removes the ghost.
+	vim.api.nvim_create_autocmd("InsertLeave", {
+		group = ghost_group,
+		callback = function()
+			debounce_timer:stop()
+			render.clear_ghost()
+		end,
+	})
+
+	-- ── Commands ───────────────────────────────────────────────────
+
 	--- Manual completion command.
 	vim.api.nvim_create_user_command("GhostComplete", function()
 		if not config.enabled then
@@ -31,6 +104,7 @@ function M.setup(opts)
 	vim.api.nvim_create_user_command("GhostToggle", function()
 		config.enabled = not config.enabled
 		if not config.enabled then
+			debounce_timer:stop()
 			render.clear_ghost()
 		end
 		vim.notify("[ghost] " .. (config.enabled and "enabled" or "disabled"))
@@ -74,15 +148,6 @@ function M.setup(opts)
 	vim.keymap.set("n", km.toggle, function()
 		vim.cmd("GhostToggle")
 	end, { desc = "Toggle ghost auto‑completion" })
-
-	-- Clear ghost on any text change (auto‑dismiss when typing past suggestion)
-	-- TODO: re‑trigger after debounce instead of just clearing
-	vim.api.nvim_create_autocmd("InsertCharPre", {
-		group = vim.api.nvim_create_augroup("ghost_nvim", { clear = true }),
-		callback = function()
-			render.clear_ghost()
-		end,
-	})
 end
 
 return M
