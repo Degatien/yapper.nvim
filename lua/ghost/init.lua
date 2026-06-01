@@ -11,6 +11,14 @@ function M.setup(opts)
 	local render = require("ghost.render")
 	local config = require("ghost.config").options
 
+	-- ── Buffer guard ────────────────────────────────────────────────
+	--- Skip completions in plugin / special buffers (Telescope, quickfix, terminals,
+	--- help, neo‑tree rename, …).  Only normal file buffers have an empty `buftype`.
+	---@return boolean
+	local function is_code_buffer()
+		return vim.bo.buftype == ""
+	end
+
 	-- ── Debounce timer & stale‑request guard ───────────────────────
 	--- Timer restarted on every keystroke; fires `debounce_ms` after the last one.
 	local debounce_timer = vim.uv.new_timer()
@@ -19,6 +27,9 @@ function M.setup(opts)
 
 	local function trigger_completion()
 		if not config.enabled then
+			return
+		end
+		if not is_code_buffer() then
 			return
 		end
 		if vim.api.nvim_get_mode().mode ~= "i" then
@@ -87,7 +98,7 @@ function M.setup(opts)
 	vim.api.nvim_create_autocmd("TextChangedI", {
 		group = ghost_group,
 		callback = function()
-			if not config.enabled then
+			if not config.enabled or not is_code_buffer() then
 				return
 			end
 			completion.cancel_stream()
@@ -114,7 +125,7 @@ function M.setup(opts)
 
 	--- Manual completion command (non‑streaming, shows errors).
 	vim.api.nvim_create_user_command("GhostComplete", function()
-		if not config.enabled then
+		if not config.enabled or not is_code_buffer() then
 			return
 		end
 		local prefix, suffix = completion.get_context()
