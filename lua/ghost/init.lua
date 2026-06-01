@@ -21,7 +21,6 @@ function M.setup(opts)
 		if not config.enabled then
 			return
 		end
-		-- Don't request if the user already left insert mode.
 		if vim.api.nvim_get_mode().mode ~= "i" then
 			return
 		end
@@ -30,18 +29,43 @@ function M.setup(opts)
 		local my_id = req_id
 
 		local prefix, suffix = completion.get_context()
-		local prompt = completion.build_prompt(prefix, suffix)
-		completion.request_completion(prompt, function(text, err)
-			if my_id ~= req_id then
-				return -- stale response; a newer keystroke has already fired
+
+		completion.request_completion_stream(
+			prefix,
+			suffix,
+			---@param text_so_far string
+			function(text_so_far)
+				-- Only render if this stream is still the active one.
+				if my_id ~= req_id then
+					return
+				end
+				-- On the first chunk we create the extmark; on subsequent chunks
+				-- we update it in place (no flicker).
+				if not render.is_visible() then
+					render.show_ghost(text_so_far)
+				else
+					render.update_ghost(text_so_far)
+				end
+			end,
+			---@param text string?
+			---@param err  string?
+			function(text, err)
+				if my_id ~= req_id then
+					return
+				end
+				if err then
+					-- Silently ignore errors during auto‑trigger.
+					return
+				end
+				-- Ensure the final text is shown (the last chunk already did this,
+				-- but guard against a race where the stream ends without a final chunk).
+				if text and text ~= "" then
+					if not render.is_visible() then
+						render.show_ghost(text)
+					end
+				end
 			end
-			if err then
-				-- Silently ignore errors during auto‑trigger.
-				-- Use :GhostComplete manually to see errors.
-				return
-			end
-			render.show_ghost(text)
-		end)
+		)
 	end
 
 	-- ── Autocmd group ──────────────────────────────────────────────
@@ -49,21 +73,24 @@ function M.setup(opts)
 	local ghost_group = vim.api.nvim_create_augroup("ghost_nvim", { clear = true })
 
 	--- Clear ghost the instant the user presses any key (before the char is inserted).
+	--- Also cancels any in‑flight stream.
 	vim.api.nvim_create_autocmd("InsertCharPre", {
 		group = ghost_group,
 		callback = function()
 			render.clear_ghost()
+			completion.cancel_stream()
 		end,
 	})
 
-	--- After the buffer changed, restart the debounce timer.
-	--- When typing stops for `debounce_ms`, a completion is triggered.
+	--- After the buffer changed, cancel any in‑flight stream and restart the
+	--- debounce timer.  When typing stops for `debounce_ms`, a completion fires.
 	vim.api.nvim_create_autocmd("TextChangedI", {
 		group = ghost_group,
 		callback = function()
 			if not config.enabled then
 				return
 			end
+			completion.cancel_stream()
 			debounce_timer:stop()
 			debounce_timer:start(
 				config.debounce_ms,
@@ -73,24 +100,28 @@ function M.setup(opts)
 		end,
 	})
 
-	--- Leaving insert mode cancels any pending request and removes the ghost.
+	--- Leaving insert mode cancels any pending request, stream, and ghost.
 	vim.api.nvim_create_autocmd("InsertLeave", {
 		group = ghost_group,
 		callback = function()
 			debounce_timer:stop()
+			completion.cancel_stream()
 			render.clear_ghost()
 		end,
 	})
 
 	-- ── Commands ───────────────────────────────────────────────────
 
-	--- Manual completion command.
+	--- Manual completion command (non‑streaming, shows errors).
 	vim.api.nvim_create_user_command("GhostComplete", function()
 		if not config.enabled then
 			return
 		end
 		local prefix, suffix = completion.get_context()
-		local prompt = completion.build_prompt(prefix, suffix)
+		local prompt = ("<|fim_prefix|>%s<|fim_suffix|>%s<|fim_middle|>"):format(
+			prefix,
+			suffix
+		)
 		completion.request_completion(prompt, function(text, err)
 			if err then
 				vim.notify("[ghost] " .. err, vim.log.levels.WARN)
@@ -105,6 +136,7 @@ function M.setup(opts)
 		config.enabled = not config.enabled
 		if not config.enabled then
 			debounce_timer:stop()
+			completion.cancel_stream()
 			render.clear_ghost()
 		end
 		vim.notify("[ghost] " .. (config.enabled and "enabled" or "disabled"))

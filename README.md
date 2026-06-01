@@ -7,10 +7,12 @@ Inline tab-completion for Neovim. Like Copilot, but local, free, and yours.
 ## Features
 
 - Ghost text rendered after the cursor via `nvim_buf_set_extmark`.
+- Streaming responses — ghost appears token by token as the model generates.
+- Multi‑line ghost rendering via `virt_lines` for function‑body completions.
 - Auto‑trigger after a typing pause (default 300ms).
 - Manual completion on `<Leader>c` (insert mode).
 - Accept with `<Tab>`, dismiss with `<Esc>`.
-- Pluggable backends — Ollama first, OpenAI later.
+- Pluggable backends — Ollama first, OpenAI later (roadmap).
 - Fill‑in‑the‑Middle (FIM) prompt format for better context awareness.
 
 ## Requirements
@@ -97,7 +99,7 @@ Typing pause (300ms) → collect buffer context
 - [ ] Auto‑pull missing model via Ollama API
 - [ ] Error handling / silent fallback when Ollama is down
 - [ ] OpenAI‑compatible backend
-- [ ] Streaming responses
+- [x] Streaming responses
 - [ ] Per‑filetype model routing
 
 ## License

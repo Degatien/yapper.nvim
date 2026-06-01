@@ -5,9 +5,38 @@ local ns = vim.api.nvim_create_namespace("ghost_ns")
 local state = {
 	extmark_id = nil,
 	text = nil,
+	-- "overlay" for single‑line, "virt_lines" for multi‑line
+	mode = nil,
 }
 
+--- Low‑level: place or update the extmark.
+--- Switches between `virt_text` (single‑line) and `virt_lines` (multi‑line)
+--- automatically so multi‑line completions display correctly.
+local function set_or_update_extmark(buf, row_1, col, text, id)
+	local has_newline = text:find("\n")
+
+	if has_newline then
+		local lines = vim.split(text, "\n", { plain = true })
+		local virt_lines = {}
+		for _, l in ipairs(lines) do
+			table.insert(virt_lines, { { l, "Comment" } })
+		end
+		return pcall(vim.api.nvim_buf_set_extmark, buf, ns, row_1, col, {
+			id = id,
+			virt_lines = virt_lines,
+			virt_lines_above = false,
+		})
+	else
+		return pcall(vim.api.nvim_buf_set_extmark, buf, ns, row_1, col, {
+			id = id,
+			virt_text = { { text, "Comment" } },
+			virt_text_pos = "overlay",
+		})
+	end
+end
+
 --- Show ghost text after the cursor.
+--- Clears any previous ghost first.
 ---@param text string The completion text to display.
 function M.show_ghost(text)
 	M.clear_ghost()
@@ -18,13 +47,33 @@ function M.show_ghost(text)
 	local row_1 = cursor[1]
 	local col = cursor[2]
 
-	local ok, id = pcall(vim.api.nvim_buf_set_extmark, 0, ns, row_1 - 1, col, {
-		virt_text = { { text, "Comment" } },
-		virt_text_pos = "overlay",
-	})
+	local ok, new_id = set_or_update_extmark(0, row_1 - 1, col, text, nil)
 	if ok then
-		state.extmark_id = id
+		state.extmark_id = new_id
 		state.text = text
+		state.mode = text:find("\n") and "virt_lines" or "overlay"
+	end
+end
+
+--- Update the existing ghost text in place (no flicker).
+--- The extmark must already exist (created by `show_ghost`).
+---@param text string The updated completion text.
+function M.update_ghost(text)
+	if not state.extmark_id then
+		return
+	end
+	if not text or text == "" then
+		M.clear_ghost()
+		return
+	end
+	local cursor = vim.api.nvim_win_get_cursor(0)
+	local ok = set_or_update_extmark(0, cursor[1] - 1, cursor[2], text, state.extmark_id)
+	if ok then
+		state.text = text
+		state.mode = text:find("\n") and "virt_lines" or "overlay"
+	else
+		-- Extmark was invalidated (e.g. buffer changed underneath us)
+		M.clear_ghost()
 	end
 end
 
@@ -35,6 +84,7 @@ function M.clear_ghost()
 	end
 	state.extmark_id = nil
 	state.text = nil
+	state.mode = nil
 end
 
 --- Insert the ghost text into the buffer and clear it.
