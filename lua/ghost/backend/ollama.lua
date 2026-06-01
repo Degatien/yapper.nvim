@@ -31,7 +31,7 @@ function M.request_completion_stream(prefix, suffix, on_chunk, on_finish)
 		messages = {
 			{
 				role = "system",
-				content = "You are a code completion engine. Complete ONLY what belongs at the cursor position — the current expression, statement, or block being typed. Do NOT continue writing the rest of the file. Do NOT regenerate code that already follows the cursor. Stop as soon as the completion is logically complete. If you must include a note or explanation, prefix it with NOTE: so it can be recognised and removed. Wrap comments at 80 characters. Output only raw code, no explanations, no markdown, no backticks, no language tags.",
+				content = "You are a code completion engine. Complete ONLY what belongs at the cursor position — the current expression, statement, or block being typed. Do NOT continue writing the rest of the file. Do NOT regenerate code that already follows the cursor. Stop as soon as the completion is logically complete. No chatting, only code. Wrap comments at 80 characters. Output only raw code, no explanations, no markdown, no backticks, no language tags.",
 			},
 			{
 				role = "user",
@@ -129,7 +129,7 @@ function M.request_completion(prefix, suffix, callback)
 		messages = {
 			{
 				role = "system",
-				content = "You are a code completion engine. Complete ONLY what belongs at the cursor position — the current expression, statement, or block being typed. Do NOT continue writing the rest of the file. Do NOT regenerate code that already follows the cursor. Stop as soon as the completion is logically complete. If you must include a note or explanation, prefix it with NOTE: so it can be recognised and removed. Wrap comments at 80 characters. Output only raw code, no explanations, no markdown, no backticks, no language tags.",
+				content = "You are a code completion engine. Complete ONLY what belongs at the cursor position — the current expression, statement, or block being typed. Do NOT continue writing the rest of the file. Do NOT regenerate code that already follows the cursor. Stop as soon as the completion is logically complete. No chatting, only code. Wrap comments at 80 characters. Output only raw code, no explanations, no markdown, no backticks, no language tags.",
 			},
 			{
 				role = "user",

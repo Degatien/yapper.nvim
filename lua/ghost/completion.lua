@@ -140,11 +140,6 @@ local function cleanup_completion(text, suffix)
 	-- Wrap comment lines at 80 characters
 	text = wrap_comment_lines(text, 80)
 
-	-- Strip any lines starting with NOTE: — the model uses this tag when it
-	-- must include a non-code note (per the system prompt).
-	text = text:gsub("^NOTE:[^\n]*\n?", "")
-	text = text:gsub("\nNOTE:[^\n]*", "")
-
 	-- Suffix overlap check: if the completion starts regenerating code that
 	-- already exists after the cursor, truncate at the overlap point.
 	-- This prevents the model from "continuing the file" beyond the cursor.
