@@ -30,10 +30,12 @@ end
 
 -- ── Response cleanup ─────────────────────────────────────────────────────────
 
---- Clean up whitespace from the model's output.
----@param text string
+--- Clean up whitespace from the model's output and truncate if the
+--- completion starts regenerating code already present in the suffix.
+---@param text   string   the raw completion from the model
+---@param suffix string   code after the cursor (used for overlap detection)
 ---@return string
-local function cleanup_completion(text)
+local function cleanup_completion(text, suffix)
 	if not text then
 		return ""
 	end
@@ -45,6 +47,44 @@ local function cleanup_completion(text)
 	if text == "" or text:match("^%s*$") then
 		return ""
 	end
+
+	-- Suffix overlap check: if the completion starts regenerating code that
+	-- already exists after the cursor, truncate at the overlap point.
+	-- This prevents the model from "continuing the file" beyond the cursor.
+	if suffix and suffix ~= "" then
+		local compl_lines = vim.split(text, "\n")
+		local suff_lines = vim.split(suffix, "\n")
+
+		-- Find where the first significant (non-empty) suffix line appears
+		-- in the completion with 2+ consecutive matching lines.
+		for si = 1, #suff_lines do
+			if suff_lines[si]:match("%S") then
+				for ci = 1, #compl_lines do
+					if compl_lines[ci] == suff_lines[si] then
+						-- Check if the next line also matches (confirms overlap)
+						if ci < #compl_lines and si < #suff_lines then
+							if compl_lines[ci + 1] == suff_lines[si + 1] then
+								-- 2+ consecutive matches — truncate before ci
+								if ci <= 2 then
+									-- If overlap starts in the first 2 lines, the
+									-- completion is likely regenerating the suffix.
+									return ""
+								end
+								local truncated = {}
+								for i = 1, ci - 1 do
+									table.insert(truncated, compl_lines[i])
+								end
+								return table.concat(truncated, "\n")
+							end
+						end
+					end
+				end
+				-- Only check the first non-empty suffix line
+				break
+			end
+		end
+	end
+
 	return text
 end
 
@@ -97,7 +137,7 @@ function M.request_completion_stream(prefix, suffix, on_chunk, on_finish)
 					stream.on_finish(nil, err)
 				end
 			else
-				local cleaned = cleanup_completion(text or "")
+				local cleaned = cleanup_completion(text or "", suffix)
 				if stream.on_finish then
 					stream.on_finish(cleaned)
 				end
@@ -124,7 +164,7 @@ function M.request_completion(prefix, suffix, callback)
 		if err then
 			callback(nil, err)
 		else
-			callback(cleanup_completion(text or ""))
+			callback(cleanup_completion(text or "", suffix))
 		end
 	end)
 end
