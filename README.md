@@ -47,7 +47,7 @@ Yapper text rendered at the cursor — streams token by token, auto-triggers aft
 
 ```lua
 {
-  "gatienb/yapper.nvim",
+  "Degatien/yapper.nvim",
   opts = {
     model = "deepseek-coder:6.7b-base",
   },
@@ -58,7 +58,7 @@ Yapper text rendered at the cursor — streams token by token, auto-triggers aft
 
 ```lua
 use {
-  "gatienb/yapper.nvim",
+  "Degatien/yapper.nvim",
   config = function()
     require("yapper").setup({ model = "deepseek-coder:6.7b-base" })
   end,
