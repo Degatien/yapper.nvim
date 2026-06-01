@@ -29,7 +29,9 @@ Inline tab-completion for Neovim. Like Copilot, but local, free, and yours.
 
 **OpenAI backend** (`backend = "openai"`):
 - API key via `config.openai.api_key` or `OPENAI_API_KEY` env var
-- An [instruct model](https://platform.openai.com/docs/models) that supports the `/v1/completions` endpoint (e.g. `gpt-3.5-turbo-instruct`).
+- Two API styles (set via `config.openai.api_style`):
+  - `"completions"` — legacy `/v1/completions` with native `suffix` param. Requires an instruct model (e.g. `gpt-3.5-turbo-instruct`).
+  - `"chat"` — modern `/v1/chat/completions`. Works with any chat model (gpt-4, opencode Go, etc.). Embeds both prefix and suffix in the prompt via a `<FILL_HERE>` sentinel.
 
 ## Installation
 
@@ -76,12 +78,27 @@ require("ghost").setup({
     url = "https://api.openai.com/v1",
     api_key = "",                  -- or set OPENAI_API_KEY env var
     model = "gpt-3.5-turbo-instruct",
+    api_style = "completions",     -- "completions" | "chat"
   },
   context_window = {
     prefix_lines = 100,            -- lines above the cursor to include
     suffix_lines = 30,             -- lines below the cursor to include
   },
   num_predict = 256,               -- max tokens the model may generate
+})
+```
+
+### opencode Go example
+
+```lua
+require("ghost").setup({
+  backend = "openai",
+  openai = {
+    url = "https://opencode.ai/zen/go/v1",
+    api_key = "oc-go-...",            -- your opencode Go API key
+    model = "deepseek-v4-flash",
+    api_style = "chat",
+  },
 })
 ```
 
