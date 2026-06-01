@@ -58,6 +58,22 @@ local function build_fim_prompt(prefix, suffix)
 	return ("<|fim_prefix|>%s<|fim_suffix|>%s<|fim_middle|>"):format(prefix, suffix)
 end
 
+-- ── Response cleanup ─────────────────────────────────────────────────────────
+
+--- Strip any FIM tokens that leak through the stop mechanism and clean up
+--- leading / trailing whitespace that would look weird as ghost text.
+---@param text string
+---@return string
+local function cleanup_completion(text)
+	-- Strip any FIM special tokens the model might accidentally emit
+	text = text:gsub("<|fim_[a-z_]+|>", "")
+	-- Strip leading newlines (model often starts with one)
+	text = text:gsub("^[\n]+", "")
+	-- Strip trailing whitespace / newlines
+	text = text:gsub("[\n ]*$", "")
+	return text
+end
+
 -- ── Streaming state ──────────────────────────────────────────────────────────
 
 local stream = {
@@ -172,7 +188,7 @@ function M.request_completion_stream(prefix, suffix, on_chunk, on_finish)
 			local job_finished = (stream.job_id ~= nil)
 			stream.job_id = nil
 
-			local text = stream.accumulated:gsub("[\n ]*$", "")
+			local text = cleanup_completion(stream.accumulated)
 			stream.buffer = ""
 			stream.accumulated = ""
 			local cb = stream.on_finish

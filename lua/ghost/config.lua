@@ -2,7 +2,7 @@ local M = {}
 
 M.defaults = {
 	backend = "ollama",
-	model = "qwen2.5-coder:7b-base",
+	model = "deepseek-coder:6.7b",
 	debounce_ms = 300,
 	enabled = true,
 	keymaps = {
