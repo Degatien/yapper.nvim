@@ -20,9 +20,10 @@ Inline tab-completion for Neovim. Like Copilot, but local, free, and yours.
 - Neovim ≥ 0.10
 - [Ollama](https://ollama.com) with a **base** code model (not instruct/chat):
   ```bash
-  ollama pull qwen2.5-coder:7b-base
+  ollama pull deepseek-coder:6.7b
   ```
   Base models output raw code. Instruct models wrap completions in markdown — avoid them.
+  Other tested models: `qwen2.5-coder:7b-base`, `deepseek-coder:1.3b` (lighter but weaker).
 
 ## Installation
 
@@ -31,7 +32,7 @@ Inline tab-completion for Neovim. Like Copilot, but local, free, and yours.
 {
   "your-name/ghost.nvim",
   opts = {
-    model = "qwen2.5-coder:1.5b",
+    model = "deepseek-coder:6.7b",
   },
 }
 ```
@@ -41,7 +42,7 @@ Inline tab-completion for Neovim. Like Copilot, but local, free, and yours.
 use {
   "your-name/ghost.nvim",
   config = function()
-    require("ghost").setup({ model = "qwen2.5-coder:1.5b" })
+    require("ghost").setup({ model = "deepseek-coder:6.7b" })
   end,
 }
 ```
@@ -53,7 +54,7 @@ All options with their defaults:
 ```lua
 require("ghost").setup({
   backend = "ollama",              -- "ollama" | "openai" (future)
-  model = "qwen2.5-coder:7b-base",  -- use a *base* model, not instruct
+  model = "deepseek-coder:6.7b",     -- use a *base* model, not instruct
   debounce_ms = 300,               -- idle time (ms) before auto-trigger fires
   enabled = true,                  -- auto-trigger on/off
   keymaps = {
@@ -97,10 +98,12 @@ Typing pause (300ms) → collect buffer context
 ## TODO
 
 - [x] Auto-trigger with debounce timer
+- [x] Streaming responses
+- [x] Multi‑line ghost rendering (virt_lines)
+- [x] FIM stop tokens + response cleanup
 - [ ] Auto‑pull missing model via Ollama API
 - [ ] Error handling / silent fallback when Ollama is down
 - [ ] OpenAI‑compatible backend
-- [x] Streaming responses
 - [ ] Per‑filetype model routing
 
 ## License
