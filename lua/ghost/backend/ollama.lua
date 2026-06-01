@@ -33,6 +33,7 @@ function M.request_completion_stream(prefix, suffix, on_chunk, on_finish)
 	local body = vim.fn.json_encode({
 		model = config.model,
 		prompt = prompt,
+		raw = true,
 		stream = true,
 		options = {
 			num_predict = config.num_predict,
@@ -123,6 +124,7 @@ function M.request_completion(prefix, suffix, callback)
 	local body = vim.fn.json_encode({
 		model = config.model,
 		prompt = prompt,
+		raw = true,
 		stream = false,
 		options = {
 			num_predict = config.num_predict,

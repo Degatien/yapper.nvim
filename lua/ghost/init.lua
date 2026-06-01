@@ -131,7 +131,9 @@ function M.setup(opts)
 		local prefix, suffix = completion.get_context()
 		completion.request_completion(prefix, suffix, function(text, err)
 			if err then
-				vim.notify("[ghost] " .. err, vim.log.levels.WARN)
+				-- Truncate long error messages at the first newline
+				local msg = err:gsub("\n.*", "")
+				vim.notify("[ghost] " .. msg, vim.log.levels.WARN)
 				return
 			end
 			render.show_ghost(text)

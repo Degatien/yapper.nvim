@@ -43,14 +43,21 @@ end
 ---@param choice table
 ---@return string
 local function chat_delta_text(choice)
-	return (choice.delta or {}).content or ""
+	local content = (choice.delta or {}).content
+	if type(content) == "string" then
+		return content
+	end
+	return ""
 end
 
 --- Extract text from a streaming completions chunk.
 ---@param choice table
 ---@return string
 local function completions_delta_text(choice)
-	return choice.text or ""
+	if type(choice.text) == "string" then
+		return choice.text
+	end
+	return ""
 end
 
 -- ── Streaming request ─────────────────────────────────────────────────────────
@@ -164,6 +171,9 @@ function M.request_completion_stream(prefix, suffix, on_chunk, on_finish)
 		on_exit = function(_, exit_code)
 			if exit_code ~= 0 and acc == "" then
 				on_finish(nil, "curl exited " .. exit_code .. ": " .. stderr_data)
+			elseif exit_code ~= 0 and acc ~= "" then
+				-- Partial data despite non-zero exit — still return what we got
+				on_finish(acc)
 			else
 				on_finish(acc)
 			end
@@ -263,10 +273,14 @@ function M.request_completion(prefix, suffix, callback)
 				return
 			end
 			if result.choices and #result.choices > 0 then
-				local text = is_chat
-					and (result.choices[1].message or {}).content
-					or result.choices[1].text
-				callback(text or "")
+				local text
+				if is_chat then
+					local msg = result.choices[1].message
+					text = msg and type(msg.content) == "string" and msg.content or ""
+				else
+					text = type(result.choices[1].text) == "string" and result.choices[1].text or ""
+				end
+				callback(text)
 			else
 				callback(nil, "empty response")
 			end

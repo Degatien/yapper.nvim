@@ -1,4 +1,8 @@
--- Loaded automatically by plugin managers after user init.lua.
--- If the user already called require("ghost").setup({…}),
--- the flag inside config prevents re‑initialisation.
+-- Loaded automatically during Neovim startup.
+-- Ensures the plugin is always loaded (commands, autocmds, keymaps).
+-- The actual config is applied by lazy.nvim's opts call to setup(opts).
+--
+-- Note: config.setup() now handles both the bare call (from plugin/ghost.lua)
+-- and the explicit call from lazy: a bare call initialises defaults;
+-- a subsequent call with opts by lazy always re-merges the user's config.
 require("ghost").setup()

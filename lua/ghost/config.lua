@@ -24,9 +24,12 @@ M.defaults = {
 	},
 	--- Context window: how much of the buffer to include around the cursor.
 	--- Larger = more context but longer latency / higher memory.
+	--- Strategy: "smart" → imports + function signature + recent lines (Copilot‑inspired)
+	---           "simple" → contiguous line window (original behaviour)
 	context_window = {
-		prefix_lines = 100, -- lines above the cursor
-		suffix_lines = 30,  -- lines below the cursor
+		strategy = "smart",
+		prefix_lines = 200, -- lines above the cursor
+		suffix_lines = 50,  -- lines below the cursor
 	},
 	--- Max tokens the model may generate per completion.
 	num_predict = 256,
@@ -35,8 +38,11 @@ M.defaults = {
 M.options = {}
 
 function M.setup(opts)
-	if M._setup_done then
-		return
+	if not opts then
+		-- Bare call from plugin/ghost.lua — already initialized via lazy, skip.
+		if M._setup_done then
+			return
+		end
 	end
 	M._setup_done = true
 	M.options = vim.tbl_deep_extend("force", vim.deepcopy(M.defaults), opts or {})

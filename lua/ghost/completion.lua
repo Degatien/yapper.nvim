@@ -21,48 +21,21 @@ end
 
 -- ── Context ───────────────────────────────────────────────────────────────────
 
---- Collect prefix (text before cursor) and suffix (text after cursor).
---- Context is trimmed to `context_window` so the model focuses on nearby code.
+--- Collect prefix and suffix for the current cursor position.
+--- Delegates to `ghost.context` which implements the configured strategy.
 ---@return string prefix, string suffix
 function M.get_context()
-	local config = require("ghost.config").options
-	local buf = vim.api.nvim_get_current_buf()
-	local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
-	local cursor = vim.api.nvim_win_get_cursor(0)
-	local row = cursor[1] -- 1‑based
-	local col = cursor[2]
-
-	local current_line = lines[row] or ""
-	local before_cursor = current_line:sub(1, col)
-	local after_cursor = current_line:sub(col + 1)
-
-	-- Lines above cursor (limited to context_window.prefix_lines, closest first)
-	local ctx = config.context_window
-	local prefix_start = math.max(1, row - ctx.prefix_lines)
-	local prefix_lines = {}
-	for i = prefix_start, row - 1 do
-		table.insert(prefix_lines, lines[i] or "")
-	end
-	table.insert(prefix_lines, before_cursor)
-
-	-- Lines below cursor (limited to context_window.suffix_lines)
-	local suffix_end = math.min(#lines, row + ctx.suffix_lines)
-	local suffix_lines = { after_cursor }
-	for i = row + 1, suffix_end do
-		table.insert(suffix_lines, lines[i] or "")
-	end
-
-	return table.concat(prefix_lines, "\n"), table.concat(suffix_lines, "\n")
+	return require("ghost.context").get_context()
 end
 
 -- ── Response cleanup ─────────────────────────────────────────────────────────
 
---- Strip FIM tokens and clean up whitespace from completion output.
+--- Strip FIM tokens, clean up whitespace, and limit output size.
 ---@param text string
 ---@return string
 local function cleanup_completion(text)
 	if not text then
-		return text
+		return ""
 	end
 	-- Strip any FIM special tokens the model might accidentally emit
 	text = text:gsub("<|fim_[a-z_]+|>", "")
@@ -70,6 +43,10 @@ local function cleanup_completion(text)
 	text = text:gsub("^[\n]+", "")
 	-- Strip trailing whitespace / newlines
 	text = text:gsub("[\n ]*$", "")
+	-- If nothing meaningful remains, return empty
+	if text == "" or text:match("^%s*$") then
+		return ""
+	end
 	return text
 end
 
