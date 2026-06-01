@@ -28,6 +28,95 @@ function M.get_context()
 	return require("ghost.context").get_context()
 end
 
+-- ── Comment wrapping ─────────────────────────────────────────────────────────
+
+--- Detect the comment prefix on a line (if any), accounting for leading whitespace.
+--- Returns (indent, comment_char, body) or nil.
+--- Supports: //, #, --, ;, %
+---@param line string
+---@return string|nil indent, string|nil comment_char, string|nil body
+local function parse_comment(line)
+	local patterns = {
+		"^(%s*)(//+)%s*(.*)$",
+		"^(%s*)(#+)%s*(.*)$",
+		"^(%s*)(%-%-+)%s*(.*)$",
+		"^(%s*)(;+)%s*(.*)$",
+		"^(%s*)(%%+)%s*(.*)$",
+	}
+	for _, pat in ipairs(patterns) do
+		local indent, cc, body = line:match(pat)
+		if indent ~= nil and cc ~= nil and cc ~= "" then
+			return indent, cc, body
+		end
+	end
+	return nil
+end
+
+--- Wrap a line of text at word boundaries to fit within max_width.
+--- Returns a list of wrapped lines.
+---@param prefix   string   indent + comment char + space (e.g. "  // ")
+---@param text     string   the comment body to wrap
+---@param max_width number
+---@return string[]
+local function wrap_text(prefix, text, max_width)
+	local words = {}
+	for w in text:gmatch("%S+") do
+		table.insert(words, w)
+	end
+	local lines = {}
+	local current = ""
+	for _, word in ipairs(words) do
+		local sep = (#current > 0) and " " or ""
+		if #current + #sep + #word > max_width - #prefix and #current > 0 then
+			table.insert(lines, current)
+			current = word
+		else
+			current = current .. sep .. word
+		end
+	end
+	if #current > 0 then
+		table.insert(lines, current)
+	end
+	local result = {}
+	for i, line in ipairs(lines) do
+		if i == 1 then
+			table.insert(result, prefix .. line)
+		else
+			table.insert(result, prefix .. line)
+		end
+	end
+	return result
+end
+
+--- Wrap comment lines that exceed max_width.
+---@param text      string
+---@param max_width number
+---@return string
+local function wrap_comment_lines(text, max_width)
+	if not text or text == "" then
+		return text
+	end
+	local lines = vim.split(text, "\n")
+	local result = {}
+	for _, line in ipairs(lines) do
+		if #line > max_width then
+			local indent, cc, body = parse_comment(line)
+			if indent and cc and body then
+				local prefix = indent .. cc .. " "
+				local wrapped = wrap_text(prefix, body, max_width)
+				for _, w in ipairs(wrapped) do
+					table.insert(result, w)
+				end
+			else
+				table.insert(result, line)
+			end
+		else
+			table.insert(result, line)
+		end
+	end
+	return table.concat(result, "\n")
+end
+
 -- ── Response cleanup ─────────────────────────────────────────────────────────
 
 --- Clean up whitespace from the model's output and truncate if the
@@ -47,6 +136,9 @@ local function cleanup_completion(text, suffix)
 	if text == "" or text:match("^%s*$") then
 		return ""
 	end
+
+	-- Wrap comment lines at 80 characters
+	text = wrap_comment_lines(text, 80)
 
 	-- Suffix overlap check: if the completion starts regenerating code that
 	-- already exists after the cursor, truncate at the overlap point.
