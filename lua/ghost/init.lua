@@ -67,8 +67,8 @@ function M.setup(opts)
 					return
 				end
 				if err then
-					-- Silently ignore errors during auto‑trigger, but hide loading.
 					render.hide_loading()
+					vim.notify("[ghost] " .. err:gsub("\n.*", ""), vim.log.levels.WARN)
 					return
 				end
 				-- Ensure the final text is shown (the last chunk already did this,

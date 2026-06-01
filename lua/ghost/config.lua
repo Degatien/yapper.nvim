@@ -38,6 +38,8 @@ M.defaults = {
 	},
 	--- Max tokens the model may generate per completion.
 	num_predict = 256,
+	--- Debug mode: logs raw model responses and cleanup steps.
+	debug = false,
 }
 
 M.options = {}

@@ -235,12 +235,24 @@ end
 
 -- ── Response cleanup ─────────────────────────────────────────────────────────
 
+local function log(msg, text1, text2)
+	local cfg = require("ghost.config").options
+	if cfg and cfg.debug then
+		local lines = {}
+		table.insert(lines, "[ghost-debug] " .. msg)
+		if text1 then table.insert(lines, "  raw:    " .. vim.inspect(text1)) end
+		if text2 then table.insert(lines, "  suffix: " .. vim.inspect(text2)) end
+		vim.notify(table.concat(lines, "\n"), vim.log.levels.INFO)
+	end
+end
+
 --- Clean up whitespace from the model's output and truncate if the
 --- completion starts regenerating code already present in the suffix.
 ---@param text   string   the raw completion from the model
 ---@param suffix string   code after the cursor (used for overlap detection)
 ---@return string
 local function cleanup_completion(text, suffix)
+	log("cleanup_completion called", text, suffix)
 	if not text then
 		return ""
 	end
@@ -299,6 +311,7 @@ local function cleanup_completion(text, suffix)
 		end
 	end
 
+	log("cleanup result", text)
 	return text
 end
 
@@ -339,6 +352,9 @@ function M.request_completion_stream(prefix, suffix, on_chunk, on_finish)
 	stream.on_chunk = on_chunk
 	stream.on_finish = on_finish
 
+	-- Track whether we've already done a prefix-only retry
+	local retried = false
+
 	stream.job_id = backend.request_completion_stream(prefix, suffix,
 		function(text_so_far)
 			if stream.on_chunk then
@@ -350,11 +366,64 @@ function M.request_completion_stream(prefix, suffix, on_chunk, on_finish)
 				if stream.on_finish then
 					stream.on_finish(nil, err)
 				end
-			else
-				local cleaned = cleanup_completion(text or "", suffix)
-				if stream.on_finish then
-					stream.on_finish(cleaned)
-				end
+				stream.job_id = nil
+				stream.on_chunk = nil
+				stream.on_finish = nil
+				return
+			end
+
+			local cleaned = cleanup_completion(text or "", suffix)
+
+			-- If FIM returned empty and we haven't retried yet, fall back to
+			-- prefix-only completion.  This handles cases where the suffix
+			-- immediately closes the current construct (e.g. cursor is inside
+			-- console.log("|") — the model sees the closing "); and thinks
+			-- "nothing to fill").
+			if cleaned == "" and suffix ~= "" and not retried then
+				retried = true
+				-- Reduce num_predict temporarily for the prefix-only retry
+				local cfg = require("ghost.config").options
+				local saved_num = cfg.num_predict
+				cfg.num_predict = math.min(saved_num or 64, 16)
+				stream.job_id = backend.request_completion_stream(prefix, "",
+					function(text_so_far)
+						if stream.on_chunk then
+							-- Truncate at first newline during streaming too
+							local nl = text_so_far:find("\n")
+							if nl then
+								text_so_far = text_so_far:sub(1, nl - 1)
+							end
+							stream.on_chunk(text_so_far)
+						end
+					end,
+					function(text2, err2)
+						cfg.num_predict = saved_num -- restore
+						if err2 then
+							if stream.on_finish then
+								stream.on_finish(nil, err2)
+							end
+						else
+							local cleaned2 = cleanup_completion(text2 or "", "")
+							-- Prefix-only: truncate at first newline to avoid
+							-- regenerating the rest of the file.
+							local nl = cleaned2:find("\n")
+							if nl then
+								cleaned2 = cleaned2:sub(1, nl - 1)
+							end
+							if stream.on_finish then
+								stream.on_finish(cleaned2)
+							end
+						end
+						stream.job_id = nil
+						stream.on_chunk = nil
+						stream.on_finish = nil
+					end
+				)
+				return
+			end
+
+			if stream.on_finish then
+				stream.on_finish(cleaned)
 			end
 			stream.job_id = nil
 			stream.on_chunk = nil
@@ -373,14 +442,41 @@ end
 ---@param callback fun(string?, string?)
 function M.request_completion(prefix, suffix, callback)
 	local backend = load_backend()
+	local retried = false
 
-	backend.request_completion(prefix, suffix, function(text, err)
-		if err then
-			callback(nil, err)
-		else
-			callback(cleanup_completion(text or "", suffix))
-		end
-	end)
+	local function do_request(suffix_val)
+		backend.request_completion(prefix, suffix_val, function(text, err)
+			if err then
+				callback(nil, err)
+				return
+			end
+
+			local cleaned = cleanup_completion(text or "", suffix_val)
+
+			-- Retry with prefix-only if FIM returned empty
+			if cleaned == "" and suffix_val ~= "" and not retried then
+				retried = true
+				local cfg = require("ghost.config").options
+				local saved_num = cfg.num_predict
+				cfg.num_predict = math.min(saved_num or 64, 16)
+				do_request("")
+				cfg.num_predict = saved_num
+				return
+			end
+
+			-- Prefix-only: truncate at first newline
+			if suffix_val == "" then
+				local nl = cleaned:find("\n")
+				if nl then
+					cleaned = cleaned:sub(1, nl - 1)
+				end
+			end
+
+			callback(cleaned)
+		end)
+	end
+
+	do_request(suffix)
 end
 
 return M
