@@ -1,17 +1,13 @@
 --- Ollama backend for ghost.nvim.
---- Uses the `/api/generate` endpoint with FIM tokens.
+--- Uses the `/api/chat` endpoint with a completion-oriented system prompt.
+--- The model's chat template wraps the request properly, and the system
+--- prompt overrides the baked-in "programming assistant" instructions.
+---
+--- Note: suffix is currently unused — the model receives only the code
+--- before the cursor. This works for most inline completions and avoids
+--- the FIM token issues present in this model's Ollama packaging.
 
 local M = {}
-
--- ── Prompt formatting ──────────────────────────────────────────────────────────
-
---- Build a Fill-in-the-Middle prompt for Qwen / DeepSeek / StarCoder models.
----@param prefix string
----@param suffix string
----@return string
-function M.build_prompt(prefix, suffix)
-	return ("<|fim_prefix|>%s<|fim_suffix|>%s<|fim_middle|>"):format(prefix, suffix)
-end
 
 -- ── Streaming request ─────────────────────────────────────────────────────────
 
@@ -20,26 +16,33 @@ end
 --- `on_chunk(text_so_far)` is called on each received token.
 --- `on_finish(text, err)`  is called once when the stream ends or fails.
 ---
----@param prefix   string
----@param suffix   string
+---@param prefix   string   code before cursor
+---@param suffix   string   code after cursor (currently unused in chat mode)
 ---@param on_chunk fun(string)
 ---@param on_finish fun(string?, string?)
 ---@return integer|nil job_id  the jobstart id, or nil on failure
 function M.request_completion_stream(prefix, suffix, on_chunk, on_finish)
 	local config = require("ghost.config").options
-	local url = config.ollama.url .. "/api/generate"
-	local prompt = M.build_prompt(prefix, suffix)
+	local url = config.ollama.url .. "/api/chat"
 
 	local body = vim.fn.json_encode({
 		model = config.model,
-		prompt = prompt,
-		raw = true,
 		stream = true,
+		messages = {
+			{
+				role = "system",
+				content = "You are a code completion engine. Complete the code at the cursor position. Output only the completion — raw code, no explanations, no markdown, no backticks, no language tags.",
+			},
+			{
+				role = "user",
+				content = prefix,
+			},
+		},
 		options = {
 			num_predict = config.num_predict,
 			temperature = 0.1,
 			top_p = 0.9,
-			stop = { "<|fim_end|>", "<|endoftext|>" },
+			stop = { "```" },
 		},
 	})
 
@@ -77,8 +80,8 @@ function M.request_completion_stream(prefix, suffix, on_chunk, on_finish)
 
 				if line ~= "" then
 					local ok, result = pcall(vim.fn.json_decode, line)
-					if ok and result.response then
-						acc = acc .. result.response
+					if ok and result.message and result.message.content then
+						acc = acc .. result.message.content
 						if not result.done then
 							on_chunk(acc)
 						end
@@ -113,24 +116,31 @@ end
 --- Send a blocking completion request to Ollama.
 ---
 --- The callback receives `(text, nil)` on success, or `(nil, err_msg)` on failure.
----@param prefix   string
----@param suffix   string
+---@param prefix   string   code before cursor
+---@param suffix   string   code after cursor (currently unused in chat mode)
 ---@param callback fun(string?, string?)
 function M.request_completion(prefix, suffix, callback)
 	local config = require("ghost.config").options
-	local url = config.ollama.url .. "/api/generate"
-	local prompt = M.build_prompt(prefix, suffix)
+	local url = config.ollama.url .. "/api/chat"
 
 	local body = vim.fn.json_encode({
 		model = config.model,
-		prompt = prompt,
-		raw = true,
 		stream = false,
+		messages = {
+			{
+				role = "system",
+				content = "You are a code completion engine. Complete the code at the cursor position. Output only the completion — raw code, no explanations, no markdown, no backticks, no language tags.",
+			},
+			{
+				role = "user",
+				content = prefix,
+			},
+		},
 		options = {
 			num_predict = config.num_predict,
 			temperature = 0.1,
 			top_p = 0.9,
-			stop = { "<|fim_end|>", "<|endoftext|>" },
+			stop = { "```" },
 		},
 	})
 
@@ -171,7 +181,7 @@ function M.request_completion(prefix, suffix, callback)
 				callback(nil, "failed to parse Ollama response")
 				return
 			end
-			callback(result.response)
+			callback(result.message.content)
 		end,
 	})
 

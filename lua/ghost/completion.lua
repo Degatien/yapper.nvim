@@ -30,15 +30,13 @@ end
 
 -- ── Response cleanup ─────────────────────────────────────────────────────────
 
---- Strip FIM tokens, clean up whitespace, and limit output size.
+--- Clean up whitespace from the model's output.
 ---@param text string
 ---@return string
 local function cleanup_completion(text)
 	if not text then
 		return ""
 	end
-	-- Strip any FIM special tokens the model might accidentally emit
-	text = text:gsub("<|fim_[a-z_]+|>", "")
 	-- Strip leading newlines (model often starts with one)
 	text = text:gsub("^[\n]+", "")
 	-- Strip trailing whitespace / newlines
