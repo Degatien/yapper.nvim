@@ -12,18 +12,24 @@ Inline tab-completion for Neovim. Like Copilot, but local, free, and yours.
 - Auto‑trigger after a typing pause (default 300ms).
 - Manual completion on `<Leader>c` (insert mode).
 - Accept with `<Tab>`, dismiss with `<Esc>`.
-- Pluggable backends — Ollama first, OpenAI later (roadmap).
+- Pluggable backends — Ollama (local) and OpenAI (cloud).
 - Fill‑in‑the‑Middle (FIM) prompt format for better context awareness.
 
 ## Requirements
 
 - Neovim ≥ 0.10
+
+**Ollama backend** (default):
 - [Ollama](https://ollama.com) with a **base** code model (not instruct/chat):
   ```bash
   ollama pull deepseek-coder:6.7b
   ```
   Base models output raw code. Instruct models wrap completions in markdown — avoid them.
   Other tested models: `qwen2.5-coder:7b-base`, `deepseek-coder:1.3b` (lighter but weaker).
+
+**OpenAI backend** (`backend = "openai"`):
+- API key via `config.openai.api_key` or `OPENAI_API_KEY` env var
+- An [instruct model](https://platform.openai.com/docs/models) that supports the `/v1/completions` endpoint (e.g. `gpt-3.5-turbo-instruct`).
 
 ## Installation
 
@@ -53,8 +59,8 @@ All options with their defaults:
 
 ```lua
 require("ghost").setup({
-  backend = "ollama",              -- "ollama" | "openai" (future)
-  model = "deepseek-coder:6.7b",     -- use a *base* model, not instruct
+  backend = "ollama",              -- "ollama" | "openai"
+  model = "deepseek-coder:6.7b",   -- used by the Ollama backend
   debounce_ms = 300,               -- idle time (ms) before auto-trigger fires
   enabled = true,                  -- auto-trigger on/off
   keymaps = {
@@ -69,6 +75,7 @@ require("ghost").setup({
   openai = {
     url = "https://api.openai.com/v1",
     api_key = "",                  -- or set OPENAI_API_KEY env var
+    model = "gpt-3.5-turbo-instruct",
   },
   context_window = {
     prefix_lines = 100,            -- lines above the cursor to include
@@ -89,8 +96,8 @@ require("ghost").setup({
 
 ```
 Typing pause (300ms) → collect buffer context
-  → build FIM prompt (prefix + suffix split at cursor)
-  → POST to Ollama
+  → build backend prompt (prefix + suffix split at cursor)
+  → POST to Ollama / OpenAI
   → render response as gray virtual text
   → Tab accepts, Esc dismisses, keep typing auto-dismisses
 ```
@@ -103,7 +110,7 @@ Typing pause (300ms) → collect buffer context
 - [x] FIM stop tokens + response cleanup
 - [ ] Auto‑pull missing model via Ollama API
 - [ ] Error handling / silent fallback when Ollama is down
-- [ ] OpenAI‑compatible backend
+- [x] OpenAI‑compatible backend
 - [ ] Per‑filetype model routing
 
 ## License

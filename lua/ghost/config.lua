@@ -16,7 +16,8 @@ M.defaults = {
 	},
 	openai = {
 		url = "https://api.openai.com/v1",
-		api_key = "",
+		api_key = "",                  -- or set OPENAI_API_KEY env var
+		model = "gpt-3.5-turbo-instruct",
 	},
 	--- Context window: how much of the buffer to include around the cursor.
 	--- Larger = more context but longer latency / higher memory.

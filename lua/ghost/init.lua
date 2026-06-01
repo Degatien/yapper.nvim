@@ -129,11 +129,7 @@ function M.setup(opts)
 			return
 		end
 		local prefix, suffix = completion.get_context()
-		local prompt = ("<|fim_prefix|>%s<|fim_suffix|>%s<|fim_middle|>"):format(
-			prefix,
-			suffix
-		)
-		completion.request_completion(prompt, function(text, err)
+		completion.request_completion(prefix, suffix, function(text, err)
 			if err then
 				vim.notify("[ghost] " .. err, vim.log.levels.WARN)
 				return

@@ -1,15 +1,23 @@
---- Helpers to collect context, build prompts, and request completions.
+--- Dispatches completion requests to the active backend.
 ---
---- Prompt strategy (tunable via config):
----   • context_window.prefix_lines   – how many lines above cursor to include
----   • context_window.suffix_lines   – how many lines below cursor to include
----   • num_predict                   – max tokens the model may generate
----
---- Two request modes:
----   • `request_completion`     – non‑streaming (used by `:GhostComplete`)
----   • `request_completion_stream` – streaming  (used by auto‑trigger)
+--- Provides shared helpers (context collection, response cleanup, stream cancellation)
+--- and routes `request_completion` / `request_completion_stream` to whichever
+--- backend is selected via `config.backend`.
 
 local M = {}
+
+-- ── Backend loader ────────────────────────────────────────────────────────────
+
+--- Load the currently active backend module by name.
+---@return table
+local function load_backend()
+	local config = require("ghost.config").options
+	local ok, backend = pcall(require, "ghost.backend." .. config.backend)
+	if not ok then
+		error("ghost.nvim: unknown backend '" .. config.backend .. "'")
+	end
+	return backend
+end
 
 -- ── Context ───────────────────────────────────────────────────────────────────
 
@@ -47,24 +55,15 @@ function M.get_context()
 	return table.concat(prefix_lines, "\n"), table.concat(suffix_lines, "\n")
 end
 
--- ── Prompt helpers ───────────────────────────────────────────────────────────
-
---- Build a Fill-in-the-Middle prompt for Qwen / DeepSeek / StarCoder models.
---- Keeps the FIM tokens clean – the model infers the language from context.
----@param prefix  string
----@param suffix  string
----@return string
-local function build_fim_prompt(prefix, suffix)
-	return ("<|fim_prefix|>%s<|fim_suffix|>%s<|fim_middle|>"):format(prefix, suffix)
-end
-
 -- ── Response cleanup ─────────────────────────────────────────────────────────
 
---- Strip any FIM tokens that leak through the stop mechanism and clean up
---- leading / trailing whitespace that would look weird as ghost text.
+--- Strip FIM tokens and clean up whitespace from completion output.
 ---@param text string
 ---@return string
 local function cleanup_completion(text)
+	if not text then
+		return text
+	end
 	-- Strip any FIM special tokens the model might accidentally emit
 	text = text:gsub("<|fim_[a-z_]+|>", "")
 	-- Strip leading newlines (model often starts with one)
@@ -78,8 +77,6 @@ end
 
 local stream = {
 	job_id = nil,
-	buffer = "",
-	accumulated = "",
 	on_chunk = nil,
 	on_finish = nil,
 }
@@ -90,15 +87,13 @@ function M.cancel_stream()
 		pcall(vim.fn.jobstop, stream.job_id)
 		stream.job_id = nil
 	end
-	stream.buffer = ""
-	stream.accumulated = ""
 	stream.on_chunk = nil
 	stream.on_finish = nil
 end
 
--- ── Ollama streaming request ─────────────────────────────────────────────────
+-- ── Streaming request dispatcher ─────────────────────────────────────────────
 
---- Fire a streaming completion request to Ollama.
+--- Fire a streaming completion request using the active backend.
 ---
 --- `on_chunk(text_so_far)` is called on each received token.
 --- `on_finish(text, err)`  is called once when the stream ends or fails.
@@ -108,186 +103,55 @@ end
 ---@param on_chunk fun(string)
 ---@param on_finish fun(string?, string?)
 function M.request_completion_stream(prefix, suffix, on_chunk, on_finish)
-	-- Cancel any prior stream first.
 	M.cancel_stream()
 
-	local config = require("ghost.config").options
-	local url = config.ollama.url .. "/api/generate"
-	local prompt = build_fim_prompt(prefix, suffix)
-
-	-- Stop tokens tell the model where to end the FIM completion.
-	-- Without these the model may regenerate the entire file context.
-	local fim_stop = { "<|fim_end|>", "<|endoftext|>" }
-
-	local body = vim.fn.json_encode({
-		model = config.model,
-		prompt = prompt,
-		stream = true,
-		options = {
-			num_predict = config.num_predict,
-			temperature = 0.1,
-			top_p = 0.9,
-			stop = fim_stop,
-		},
-	})
-
-	local args = {
-		"curl",
-		"-sN", -- silent + no‑buffer (streaming)
-		"-X",
-		"POST",
-		url,
-		"-H",
-		"Content-Type: application/json",
-		"-d",
-		body,
-	}
+	local backend = load_backend()
 
 	stream.on_chunk = on_chunk
 	stream.on_finish = on_finish
 
-	local stderr_data = ""
-
-	stream.job_id = vim.fn.jobstart(args, {
-		stdout_buffered = false,
-		on_stdout = function(_, data)
-			if not data then
-				return
-			end
-			-- Re‑join lines (jobstart strips newlines) to reconstruct raw stream.
-			stream.buffer = stream.buffer .. table.concat(data, "\n")
-
-			-- Process every complete line in the buffer.
-			while true do
-				local nl = stream.buffer:find("\n")
-				if not nl then
-					break
-				end
-				local line = stream.buffer:sub(1, nl - 1):gsub("^%s+", ""):gsub("%s+$", "")
-				stream.buffer = stream.buffer:sub(nl + 1)
-
-				if line ~= "" then
-					local ok, result = pcall(vim.fn.json_decode, line)
-					if ok and result.response then
-						stream.accumulated = stream.accumulated .. result.response
-						if not result.done then
-							if stream.on_chunk then
-								stream.on_chunk(stream.accumulated)
-							end
-						end
-					end
-				end
+	stream.job_id = backend.request_completion_stream(prefix, suffix,
+		function(text_so_far)
+			if stream.on_chunk then
+				stream.on_chunk(text_so_far)
 			end
 		end,
-		on_stderr = function(_, data)
-			if data then
-				stderr_data = table.concat(data, "\n")
+		function(text, err)
+			if err then
+				if stream.on_finish then
+					stream.on_finish(nil, err)
+				end
+			else
+				local cleaned = cleanup_completion(text or "")
+				if stream.on_finish then
+					stream.on_finish(cleaned)
+				end
 			end
-		end,
-		on_exit = function(_, exit_code)
-			local job_finished = (stream.job_id ~= nil)
 			stream.job_id = nil
-
-			local text = cleanup_completion(stream.accumulated)
-			stream.buffer = ""
-			stream.accumulated = ""
-			local cb = stream.on_finish
 			stream.on_chunk = nil
 			stream.on_finish = nil
-
-			if cb then
-				if exit_code ~= 0 and text == "" then
-					cb(nil, "curl exited " .. exit_code .. ": " .. stderr_data)
-				else
-					cb(text)
-				end
-			end
-		end,
-	})
-
-	if stream.job_id <= 0 then
-		local cb = stream.on_finish
-		M.cancel_stream()
-		if cb then
-			cb(nil, "failed to start curl")
 		end
-	end
+	)
 end
 
--- ── Non‑streaming request (used by `:GhostComplete`) ─────────────────────────
+-- ── Non‑streaming request dispatcher ─────────────────────────────────────────
 
---- Send a blocking completion request to Ollama.
+--- Send a blocking completion request using the active backend.
 ---
 --- The callback receives `(text, nil)` on success, or `(nil, err_msg)` on failure.
----@param prompt   string
+---@param prefix   string
+---@param suffix   string
 ---@param callback fun(string?, string?)
-function M.request_completion(prompt, callback)
-	local config = require("ghost.config").options
-	local url = config.ollama.url .. "/api/generate"
+function M.request_completion(prefix, suffix, callback)
+	local backend = load_backend()
 
-	local fim_stop = { "<|fim_end|>", "<|endoftext|>" }
-
-	local body = vim.fn.json_encode({
-		model = config.model,
-		prompt = prompt,
-		stream = false,
-		options = {
-			num_predict = config.num_predict,
-			temperature = 0.1,
-			top_p = 0.9,
-			stop = fim_stop,
-		},
-	})
-
-	local args = {
-		"curl",
-		"-s",
-		"-X",
-		"POST",
-		url,
-		"-H",
-		"Content-Type: application/json",
-		"-d",
-		body,
-	}
-
-	local stdout_data = ""
-	local stderr_data = ""
-
-	local job_id = vim.fn.jobstart(args, {
-		stdout_buffered = true,
-		on_stdout = function(_, data)
-			if data then
-				stdout_data = table.concat(data, "\n")
-			end
-		end,
-		on_stderr = function(_, data)
-			if data then
-				stderr_data = table.concat(data, "\n")
-			end
-		end,
-		on_exit = function(_, exit_code)
-			if exit_code ~= 0 then
-				callback(nil, "curl exited " .. exit_code .. ": " .. stderr_data)
-				return
-			end
-			local ok, result = pcall(vim.fn.json_decode, stdout_data)
-			if not ok then
-				callback(nil, "failed to parse Ollama response")
-				return
-			end
-			if result.response then
-				local text = result.response:gsub("[\n ]*$", "")
-				callback(text)
-			else
-				callback(nil, "empty response from model")
-			end
-		end,
-	})
-
-	if job_id <= 0 then
-		callback(nil, "failed to start curl")
-	end
+	backend.request_completion(prefix, suffix, function(text, err)
+		if err then
+			callback(nil, err)
+		else
+			callback(cleanup_completion(text or ""))
+		end
+	end)
 end
 
 return M
