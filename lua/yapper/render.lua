@@ -2,6 +2,31 @@ local M = {}
 
 local ns = vim.api.nvim_create_namespace("yapper_ns")
 
+--- Ghost text highlight group. Set up lazily so users can override it.
+--- Defaults to a dimmed foreground that blends in without being distracting.
+local GHOST_HL = "YapperGhost"
+
+--- Set up the default ghost-text highlight if it doesn't exist yet.
+--- If the user has already defined `YapperGhost` in their colorscheme or
+--- init.lua, we respect that and don't override it.
+local function ensure_highlight()
+	local hl = vim.api.nvim_get_hl(0, { name = GHOST_HL })
+	-- nvim_get_hl returns {} when the group doesn't exist
+	if not hl or vim.tbl_isempty(hl) then
+		pcall(vim.api.nvim_set_hl, 0, GHOST_HL, {
+			fg = "#6b7280", -- Tailwind gray-500: subtle, not invisible
+			italic = true,
+		})
+	end
+end
+
+--- Shared helper: build the virt_text for a single chunk.
+---@param text string
+---@return table
+local function virt_text_entry(text)
+	return { { text, GHOST_HL } }
+end
+
 local state = {
 	extmark_id = nil,
 	text = nil,
@@ -10,27 +35,43 @@ local state = {
 	loading_id = nil,
 }
 
---- Low‑level: place or update the extmark.
---- Switches between `virt_text` (single‑line) and `virt_lines` (multi‑line)
---- automatically so multi‑line completions display correctly.
-local function set_or_update_extmark(buf, row_1, col, text, id)
+--- Low‑level: place or update the extmark with ghost-text style rendering.
+---
+--- For single‑line completions the text is rendered as an inline overlay
+--- (ghost text after the cursor).  For multi‑line completions the **first**
+--- line is rendered inline and the remaining lines are rendered as virtual
+--- lines below — this gives a natural ghost-text feel where the first line
+--- flows from the cursor and you can preview what follows.
+---
+---@param buf  number
+---@param row1 number  1‑based row for the extmark
+---@param col  number  0‑based column
+---@param text string   the completion text
+---@param id   integer|nil  existing extmark id to update in place
+---@return boolean, integer|nil
+local function set_or_update_extmark(buf, row1, col, text, id)
+	ensure_highlight()
 	local has_newline = text:find("\n")
 
 	if has_newline then
 		local lines = vim.split(text, "\n", { plain = true })
-		local virt_lines = {}
-		for _, l in ipairs(lines) do
-			table.insert(virt_lines, { { l, "Comment" } })
+		-- First line: inline ghost text after the cursor
+		-- Remaining lines: virt_lines below (ghost preview)
+		local remaining = {}
+		for i = 2, #lines do
+			table.insert(remaining, virt_text_entry(lines[i]))
 		end
-		return pcall(vim.api.nvim_buf_set_extmark, buf, ns, row_1, col, {
+		return pcall(vim.api.nvim_buf_set_extmark, buf, ns, row1, col, {
 			id = id,
-			virt_lines = virt_lines,
+			virt_text = virt_text_entry(lines[1]),
+			virt_text_pos = "overlay",
+			virt_lines = remaining,
 			virt_lines_above = false,
 		})
 	else
-		return pcall(vim.api.nvim_buf_set_extmark, buf, ns, row_1, col, {
+		return pcall(vim.api.nvim_buf_set_extmark, buf, ns, row1, col, {
 			id = id,
-			virt_text = { { text, "Comment" } },
+			virt_text = virt_text_entry(text),
 			virt_text_pos = "overlay",
 		})
 	end
