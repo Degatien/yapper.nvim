@@ -9,7 +9,7 @@ Yapper text rendered at the cursor — streams token by token, auto-triggers aft
 - **Yapper text** rendered after the cursor via `nvim_buf_set_extmark` (virtual text and `virt_lines` for multi-line completions).
 - **Streaming** — completions appear token by token as the model generates.
 - **Auto-trigger** — fires after a configurable typing pause (`debounce_ms`).
-- **Manual completion** — `:YapperComplete` or `<Leader>c` in insert mode.
+- **Manual completion** — `:YapperComplete` in insert mode.
 - **Accept / dismiss** — `<Tab>` accepts, `<Esc>` dismisses, any keystroke cancels mid-flight requests.
 - **FIM (Fill-in-the-Middle)** — prefix + suffix sent to the model for context-aware completions that don't regenerate the rest of the file.
 - **Prefix-only fallback** — when FIM returns empty (cursor inside an open/close pair), retries without suffix so the model still generates a suggestion.
@@ -83,7 +83,6 @@ require("yapper").setup({
 
   -- Keymaps (insert mode unless noted)
   keymaps = {
-    manual = "<Leader>c",           -- trigger manual completion
     toggle = "<Leader>ct",          -- toggle auto-trigger (normal mode)
     accept = "<Tab>",               -- accept the yapper suggestion
     dismiss = "<Esc>",              -- dismiss the yapper suggestion

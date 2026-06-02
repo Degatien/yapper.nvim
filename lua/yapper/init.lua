@@ -162,11 +162,6 @@ function M.setup(opts)
 
 	local km = config.keymaps
 
-	-- Manual completion from insert mode
-	vim.keymap.set("i", km.manual, function()
-		vim.cmd("YapperComplete")
-	end, { desc = "Request yapper completion" })
-
 	-- Accept: inserts the yapper text when present, otherwise passes through.
 	vim.keymap.set("i", km.accept, function()
 		if render.is_visible() then
