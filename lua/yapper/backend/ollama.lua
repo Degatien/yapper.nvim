@@ -57,6 +57,9 @@ function M.request_completion_stream(prefix, suffix, on_chunk, on_finish)
 	if api_suffix then
 		request.suffix = api_suffix
 	end
+	if config.ollama.keep_alive then
+		request.keep_alive = config.ollama.keep_alive
+	end
 	local body = vim.fn.json_encode(request)
 
 	local args = {
@@ -150,6 +153,9 @@ function M.request_completion(prefix, suffix, callback)
 	}
 	if api_suffix then
 		request.suffix = api_suffix
+	end
+	if config.ollama.keep_alive then
+		request.keep_alive = config.ollama.keep_alive
 	end
 	local body = vim.fn.json_encode(request)
 

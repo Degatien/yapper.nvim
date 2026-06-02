@@ -17,6 +17,10 @@ M.defaults = {
 		--- manually constructing FIM prompt tokens. Set to true for models
 		--- with built-in FIM templates (qwen2.5-coder, codegemma, etc.).
 		fim_suffix_api = false,
+		--- How long to keep the model loaded between requests.
+		--- Duration string like "5m", "30m" or "-1" to keep loaded
+		--- indefinitely until the server restarts.  Default in Ollama is "5m".
+		keep_alive = "30m",
 	},
 	openai = {
 		url = "https://api.openai.com/v1",
