@@ -1,17 +1,29 @@
 --- Ollama backend for yapper.nvim.
---- Uses `/api/generate` with FIM tokens for base completion models
---- (deepseek-coder-base, qwen2.5-coder-base, etc.) that have no chat template.
+--- Uses `/api/generate` for code completion.
+---
+--- Supports two FIM modes:
+---   - `fim_suffix_api = false` (default): manually constructs FIM tokens in the
+---     prompt. Works with deepseek-coder-base and similar models.
+---   - `fim_suffix_api = true`: uses Ollama's native `suffix` API parameter.
+---     Required for models with built-in FIM templates (qwen2.5-coder, codegemma).
 
 local M = {}
 
 -- ── Prompt formatting ──────────────────────────────────────────────────────────
 
---- Build a Fill-in-the-Middle prompt for DeepSeek / Qwen / StarCoder models.
+--- Build a Fill-in-the-Middle prompt for the configured model.
+--- When `fim_suffix_api` is true, returns just the prefix (the suffix is sent
+--- via a separate API parameter). Otherwise, manually wraps prefix and suffix
+--- with FIM control tokens (deepseek-coder, etc.).
 ---@param prefix string
 ---@param suffix string
----@return string
+---@return string prompt, string|nil api_suffix
 function M.build_prompt(prefix, suffix)
-	return ("<|fim_prefix|>%s<|fim_suffix|>%s<|fim_middle|>"):format(prefix, suffix)
+	local config = require("yapper.config").options
+	if config.ollama.fim_suffix_api then
+		return prefix, suffix
+	end
+	return ("<|fim_prefix|>%s<|fim_suffix|>%s<|fim_middle|>"):format(prefix, suffix), nil
 end
 
 -- ── Streaming request ─────────────────────────────────────────────────────────
@@ -29,9 +41,9 @@ end
 function M.request_completion_stream(prefix, suffix, on_chunk, on_finish)
 	local config = require("yapper.config").options
 	local url = config.ollama.url .. "/api/generate"
-	local prompt = M.build_prompt(prefix, suffix)
+	local prompt, api_suffix = M.build_prompt(prefix, suffix)
 
-	local body = vim.fn.json_encode({
+	local request = {
 		model = config.model,
 		prompt = prompt,
 		stream = true,
@@ -39,9 +51,13 @@ function M.request_completion_stream(prefix, suffix, on_chunk, on_finish)
 			num_predict = config.num_predict,
 			temperature = 0.1,
 			top_p = 0.9,
-			stop = { "<|fim_end|>", "<|endoftext|>", "<|fim_middle|>" },
+			stop = { "<|fim_end|>", "<|endoftext|>" },
 		},
-	})
+	}
+	if api_suffix then
+		request.suffix = api_suffix
+	end
+	local body = vim.fn.json_encode(request)
 
 	local args = {
 		"curl",
@@ -119,9 +135,9 @@ end
 function M.request_completion(prefix, suffix, callback)
 	local config = require("yapper.config").options
 	local url = config.ollama.url .. "/api/generate"
-	local prompt = M.build_prompt(prefix, suffix)
+	local prompt, api_suffix = M.build_prompt(prefix, suffix)
 
-	local body = vim.fn.json_encode({
+	local request = {
 		model = config.model,
 		prompt = prompt,
 		stream = false,
@@ -129,9 +145,13 @@ function M.request_completion(prefix, suffix, callback)
 			num_predict = config.num_predict,
 			temperature = 0.1,
 			top_p = 0.9,
-			stop = { "<|fim_end|>", "<|endoftext|>", "<|fim_middle|>" },
+			stop = { "<|fim_end|>", "<|endoftext|>" },
 		},
-	})
+	}
+	if api_suffix then
+		request.suffix = api_suffix
+	end
+	local body = vim.fn.json_encode(request)
 
 	local args = {
 		"curl",

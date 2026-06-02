@@ -13,6 +13,10 @@ M.defaults = {
 	},
 	ollama = {
 		url = "http://localhost:11434",
+		--- Use Ollama's native `suffix` API parameter for FIM instead of
+		--- manually constructing FIM prompt tokens. Set to true for models
+		--- with built-in FIM templates (qwen2.5-coder, codegemma, etc.).
+		fim_suffix_api = false,
 	},
 	openai = {
 		url = "https://api.openai.com/v1",

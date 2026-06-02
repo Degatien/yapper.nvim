@@ -246,8 +246,9 @@ local function log(msg, text1, text2)
 	end
 end
 
---- Clean up whitespace from the model's output and truncate if the
---- completion starts regenerating code already present in the suffix.
+--- Clean up whitespace from the model's output and remove any code the model
+--- re-generated that already exists after the cursor (suffix overlap).
+--- Uses vim.diff to robustly extract only the new/changed lines.
 ---@param text   string   the raw completion from the model
 ---@param suffix string   code after the cursor (used for overlap detection)
 ---@return string
@@ -274,40 +275,29 @@ local function cleanup_completion(text, suffix)
 	-- Wrap comment lines at 80 characters
 	text = wrap_comment_lines(text, 80)
 
-	-- Suffix overlap check: if the completion starts regenerating code that
-	-- already exists after the cursor, truncate at the overlap point.
-	-- This prevents the model from "continuing the file" beyond the cursor.
+	-- Diff against the suffix to remove any code the model re-generated
+	-- that already exists after the cursor. This is more robust than the
+	-- old heuristic of matching 2+ consecutive lines — vim.diff handles
+	-- partial overlaps, whitespace differences, and any layout correctly.
 	if suffix and suffix ~= "" then
-		local compl_lines = vim.split(text, "\n")
-		local suff_lines = vim.split(suffix, "\n")
-
-		-- Find where the first significant (non-empty) suffix line appears
-		-- in the completion with 2+ consecutive matching lines.
-		for si = 1, #suff_lines do
-			if suff_lines[si]:match("%S") then
-				for ci = 1, #compl_lines do
-					if compl_lines[ci] == suff_lines[si] then
-						-- Check if the next line also matches (confirms overlap)
-						if ci < #compl_lines and si < #suff_lines then
-							if compl_lines[ci + 1] == suff_lines[si + 1] then
-								-- 2+ consecutive matches — truncate before ci
-								if ci <= 2 then
-									-- If overlap starts in the first 2 lines, the
-									-- completion is likely regenerating the suffix.
-									return ""
-								end
-								local truncated = {}
-								for i = 1, ci - 1 do
-									table.insert(truncated, compl_lines[i])
-								end
-								return table.concat(truncated, "\n")
-							end
-						end
-					end
+		local diff_str = vim.diff(suffix, text, { result_type = "unified" })
+		if diff_str and diff_str ~= "" then
+			local new_lines = {}
+			for line in diff_str:gmatch("[^\n]+") do
+				-- Lines starting with '+' are additions (in text but not in suffix).
+				-- Skip '+++' which is the diff header line.
+				local first = line:sub(1, 1)
+				local second = line:sub(2, 2)
+				if first == "+" and second ~= "+" and second ~= "-" then
+					table.insert(new_lines, line:sub(2))
 				end
-				-- Only check the first non-empty suffix line
-				break
 			end
+			text = table.concat(new_lines, "\n")
+			-- Re-strip trailing whitespace after diff extraction
+			text = text:gsub("[\n ]*$", "")
+		else
+			-- diff returned empty → completion overlaps entirely with suffix
+			return ""
 		end
 	end
 

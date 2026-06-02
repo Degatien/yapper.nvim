@@ -91,6 +91,7 @@ require("yapper").setup({
   -- Ollama backend options
   ollama = {
     url = "http://localhost:11434",
+    fim_suffix_api = false,        -- set true for qwen2.5-coder, codegemma, etc.
   },
 
   -- OpenAI backend options
@@ -135,6 +136,9 @@ require("yapper").setup({
   model = "qwen2.5-coder:7b-base",
   debounce_ms = 500,
   num_predict = 64,
+  ollama = {
+    fim_suffix_api = true,           -- enables Ollama's native FIM suffix API
+  },
   context_window = {
     strategy = "smart",
     lsp_enrich = true,
